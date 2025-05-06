@@ -1,0 +1,13 @@
+# temp
+temp.py
+
+# __pycache__
+*.pyc
+
+# vscode file
+.vscode/
+
+# data file
+*.npy
+*.csv
+*.parquet
