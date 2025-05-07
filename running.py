@@ -9,6 +9,9 @@ from collections import OrderedDict
 import torch
 import time
 import numpy as np
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import accuracy_score
+from utils.utils import matthews_correlation
 
 logger = logging.getLogger("__main__")
 
@@ -72,7 +75,7 @@ def pipeline_factory(config):
     task = config.task
 
     if task == "fault_detection":
-        return UnSupervisedRunner
+        return Anomaly_Detection_Runner
     else:
         raise NotImplementedError("Task '{}' not implemented".format(task))
 
@@ -124,10 +127,10 @@ class BaseRunner(object):
         self.printer.print(dyn_string)
 
 
-class UnSupervisedRunner(BaseRunner):
+class Anomaly_Detection_Runner(BaseRunner):
     def __init__(self, *args, **kwargs):
 
-        super(UnSupervisedRunner, self).__init__(*args, **kwargs)
+        super(Anomaly_Detection_Runner, self).__init__(*args, **kwargs)
 
     def train_epoch(self, epoch_num=None):
 
@@ -140,11 +143,10 @@ class UnSupervisedRunner(BaseRunner):
             self.optimizer.zero_grad()
 
             X, targets = batch
-            X = X.to(device=self.device)
-            targets = targets.to(device=self.device)
-            predictions = self.model(X)
+            X = X.float().to(device=self.device)
+            outputs = self.model(X)
 
-            loss = self.loss_module(predictions, targets)
+            loss = self.loss_module(X, outputs)
             batch_loss = loss.sum()
             mean_loss = loss.mean()
 
@@ -169,82 +171,132 @@ class UnSupervisedRunner(BaseRunner):
         self.epoch_metrics["loss"] = epoch_loss
         return self.epoch_metrics
 
-    def evaluate(self, epoch_num=None, keep_all=True, stage="val"):
+    def evaluate(self, epoch_num=None, keep_all=True):
 
         self.model = self.model.eval()
 
-        epoch_mse_loss = 0  # total loss of epoch
-        epoch_mae_loss = 0
+        epoch_loss = 0  # total loss of epoch
         total_samples = 0  # total samples in epoch
 
         per_batch = {
             "target_masks": [],
             "targets": [],
-            "predictions": [],
+            "outputs": [],
             "metrics": [],
         }
         for i, batch in enumerate(self.dataloader):
 
-            X, targets, x_mask, y_mask = batch
-            X = X.to(device=self.device, dtype=torch.bfloat16)
-            targets = targets.to(device=self.device, dtype=torch.bfloat16)
-            predictions = self.model(X, x_mask, targets, y_mask, stage, i)
+            X, targets = batch
+            X = X.float().to(self.device)
+            outputs = self.model(X)
 
-            f_dim = -1 if self.config.features == "MS" else 0
-            predictions = predictions[:, -self.config.pred_len :, f_dim:]
-            targets = targets[:, -self.config.pred_len :, f_dim:]
-
-            mse_loss = self.loss_module(predictions, targets)
-            batch_mse_loss = mse_loss.sum()
-            mean_mse_loss = mse_loss.mean()  # mean loss (over samples)
+            loss = self.loss_module(X, outputs)
+            batch_loss = loss.sum()
+            mean_loss = loss.mean()  # mean loss (over samples)
             # (batch_size,) loss for each sample in the batch
-            mae_loss = self.mae_criterion(predictions, targets)
-            batch_mae_loss = mae_loss.sum()
-            mean_mae_loss = mae_loss.mean()
 
             per_batch["targets"].append(targets.half().cpu().numpy())
-            per_batch["predictions"].append(predictions.half().cpu().numpy())
-            per_batch["metrics"].append([mse_loss.half().cpu().numpy()])
+            per_batch["outputs"].append(outputs.half().cpu().numpy())
+            per_batch["metrics"].append([loss.half().cpu().numpy()])
 
             metrics = {
-                "mse_loss": mean_mse_loss,
-                "mae_loss": mean_mae_loss,
+                "loss": mean_loss,
             }
             if i % self.print_interval == 0:
                 ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
                 self.print_callback(i, metrics, prefix="Evaluating " + ending)
 
-            total_samples += mse_loss.numel()
-            epoch_mse_loss += (
-                batch_mse_loss.half().cpu().item()
-            )  # add total loss of batch
-            epoch_mae_loss += batch_mae_loss.half().cpu().item()
+            total_samples += loss.numel()
+            epoch_loss += batch_loss.half().cpu().item()
 
-        epoch_mse_loss = (
-            epoch_mse_loss / total_samples
+        epoch_loss = (
+            epoch_loss / total_samples
         )  # average loss per element for whole epoch
-        epoch_mae_loss = epoch_mae_loss / total_samples
         self.epoch_metrics["epoch"] = epoch_num
-        self.epoch_metrics["mse_loss"] = epoch_mse_loss
-        self.epoch_metrics["mae_loss"] = epoch_mae_loss
+        self.epoch_metrics["loss"] = epoch_loss
 
         if keep_all:
             return self.epoch_metrics, per_batch
         else:
             return self.epoch_metrics
 
+    def test(self, epoch_num=None, train_loader=None):
+
+        self.model = self.model.eval()
+        attens_energy = []
+
+        # (1) statistic on the train set
+        with torch.no_grad():
+            for i, batch in enumerate(train_loader):
+                X, _ = batch
+                X = X.float().to(self.device)
+                outputs = self.model(X)
+
+                loss = self.loss_module(X, outputs)
+
+                # cal score
+                score = torch.mean(loss, dim=-1).detach().cpu().numpy()
+                attens_energy.append(score)
+
+        attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
+        train_energy = np.array(attens_energy)
+
+        # (2) statistic on the test set
+        attens_energy = []
+        test_labels = []
+        for i, batch in enumerate(self.dataloader):
+            X, targets = batch
+            X = X.float().to(self.device)
+            outputs = self.model(X)
+
+            loss = self.loss_module(X, outputs)
+
+            # cal score
+            score = torch.mean(loss, dim=-1).detach().cpu().numpy()
+            attens_energy.append(score)
+            test_labels.append(targets)
+
+        attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
+        test_energy = np.array(attens_energy)
+        combined_energy = np.concatenate([train_energy, test_energy], axis=0)
+        threshold = np.percentile(combined_energy, 100 - self.config.anomaly_ratio)
+        logger.info("Threshold :", threshold)
+
+        # (3) evaluation on the test set
+        pred = (test_energy > threshold).astype(int)
+        test_labels = np.concatenate(test_labels, axis=0).reshape(-1)
+        test_labels = np.array(test_labels)
+        gt = test_labels.astype(int)
+
+        # fault detection
+        pred = np.array(pred)
+        gt = np.array(gt)
+
+        accuracy = accuracy_score(gt, pred)
+        precision, recall, f_score, support = precision_recall_fscore_support(
+            gt, pred, average="binary"
+        )
+
+        mcc = matthews_correlation(gt, pred)
+
+        self.epoch_metrics["accuracy"] = accuracy
+        self.epoch_metrics["precision"] = precision
+        self.epoch_metrics["recall"] = recall
+        self.epoch_metrics["f1"] = f_score
+        self.epoch_metrics["mcc"] = mcc
+
+        return self.epoch_metrics
+
 
 def validate(
-    val_evaluator, tensorboard_writer, config, best_metrics, best_value, epoch
+    val_evaluator, tensorboard_writer, config, best_metrics, best_value, epoch, fold_i=0
 ):
     """Run an evaluation on the validation set while logging metrics, and handle outcome"""
 
     logger.info("Evaluating on validation set ...")
     eval_start_time = time.time()
     with torch.no_grad():
-        aggr_metrics, per_batch = val_evaluator.evaluate(
-            epoch, keep_all=True, stage="val"
-        )
+        aggr_metrics = val_evaluator.evaluate(epoch, keep_all=False, stage="val")
     eval_runtime = time.time() - eval_start_time
     logger.info(
         "Validation runtime: {} hours, {} minutes, {} seconds\n".format(
@@ -269,7 +321,7 @@ def validate(
     print()
     print_str = "Epoch {} Validation Summary: ".format(epoch)
     for k, v in aggr_metrics.items():
-        tensorboard_writer.add_scalar("{}/val".format(k), v, epoch)
+        tensorboard_writer.add_scalar(f"{k}/val_fold_{fold_i}", v, epoch)
         print_str += "{}: {:8f} | ".format(k, v)
     logger.info(print_str)
 
@@ -287,27 +339,19 @@ def validate(
             )
         best_metrics = aggr_metrics.copy()
 
-        pred_filepath = os.path.join(config.pred_dir, "best_predictions")
-        for key in per_batch.keys():
-            per_batch[key] = np.array(
-                per_batch[key], dtype=object
-            )  # resolve issue of inconsistent array sizes
-        np.savez(pred_filepath, **per_batch)
-
     return aggr_metrics, best_metrics, best_value
 
 
-def test(test_evaluator, tensorboard_writer, config, best_metrics, best_value, epoch):
+def test(
+    test_evaluator,
+    train_loader,
+):
     """Run an evaluation on the validation set while logging metrics, and handle outcome"""
 
     logger.info("Testing on test set ...")
     eval_start_time = time.time()
     with torch.no_grad():
-        aggr_metrics, per_batch = test_evaluator.evaluate(
-            epoch_num=None, keep_all=True, stage="test"
-        )
-        del aggr_metrics["epoch"]
-    aggr_metrics = {f"test_{key}": value for key, value in aggr_metrics.items()}
+        aggr_metrics = test_evaluator.test(train_loader=train_loader)
     eval_runtime = time.time() - eval_start_time
     logger.info(
         "Testing runtime: {} hours, {} minutes, {} seconds\n".format(
@@ -332,30 +376,7 @@ def test(test_evaluator, tensorboard_writer, config, best_metrics, best_value, e
     print()
     print_str = "Testing Summary: "
     for k, v in aggr_metrics.items():
-        tensorboard_writer.add_scalar("{}/test".format(k), v, epoch)
         print_str += "{}: {:8f} | ".format(k, v)
     logger.info(print_str)
-    key_metric = "test_" + config.key_metric
 
-    if config.key_metric in NEG_METRICS:
-        condition = aggr_metrics[key_metric] < best_value
-    else:
-        condition = aggr_metrics[key_metric] > best_value
-    if condition:
-        best_value = aggr_metrics[key_metric]
-        if not config.no_savemodel:
-            utils.save_model(
-                os.path.join(config.save_dir, "model_best.pth"),
-                epoch,
-                test_evaluator.model,
-            )
-        best_metrics = aggr_metrics.copy()
-
-        pred_filepath = os.path.join(config.pred_dir, "best_predictions")
-        for key in per_batch.keys():
-            per_batch[key] = np.array(
-                per_batch[key], dtype=object
-            )  # resolve issue of inconsistent array sizes
-        np.savez(pred_filepath, **per_batch)
-
-    return aggr_metrics, best_metrics, best_value
+    return aggr_metrics
