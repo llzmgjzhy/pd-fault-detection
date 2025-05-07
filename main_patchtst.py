@@ -60,7 +60,7 @@ def main(config):
 
     # train : val : test , 3:1:1
     splits = utils.stratified_train_val_test_split(
-        signals_ids, labels, num_folds=config.splits_num, seed=config.random_seed
+        signals_ids, labels, num_folds=config.split_num, seed=config.seed
     )
 
     for fold_i, (train_idx, val_idx, test_idx) in enumerate(splits):
@@ -136,6 +136,7 @@ def main(config):
             best_metrics,
             best_value,
             epoch=0,
+            fold_i=fold_i,
         )
         metrics_names, metrics_values = zip(*aggr_metrics_val.items())
         metrics.append(list(metrics_values))
@@ -143,18 +144,19 @@ def main(config):
         logger.info("Starting training...")
 
         # training
-        # fmt: off
+
         start_epoch = 0
-        for epoch in tqdm(range(start_epoch + 1, config.epochs + 1), desc="Training Epoch", leave=False):
-        # fmt: on
+        for epoch in tqdm(
+            range(start_epoch + 1, config.epochs + 1),
+            desc="Training Epoch",
+            leave=False,
+        ):
             epoch_start_time = time.time()
-            aggr_metrics_train = trainer.train_epoch(
-                epoch
-            )
+            aggr_metrics_train = trainer.train_epoch(epoch)
             epoch_runtime = time.time() - epoch_start_time
             print_str = f"Epoch {epoch} Training Summary: "
             for k, v in aggr_metrics_train.items():
-                tensorboard_writer.add_scalar(f"{k}/train", v, epoch)
+                tensorboard_writer.add_scalar(f"{k}/train_fold_{fold_i}", v, epoch)
                 print_str += f"{k}: {v:8f} | "
 
             logger.info(print_str)
@@ -173,12 +175,16 @@ def main(config):
             )
             logger.info("Avg batch train. time: {} seconds".format(avg_batch_time))
 
-            if ((epoch == config.epochs) or (epoch % config.val_interval == 0)):
-                aggr_metrics_val, best_metrics, best_value = validate(test_evaluator,tensorboard_writer,
-                config,
-                best_metrics,
-                best_value,
-                epoch)
+            if (epoch == config.epochs) or (epoch % config.val_interval == 0):
+                aggr_metrics_val, best_metrics, best_value = validate(
+                    test_evaluator,
+                    tensorboard_writer,
+                    config,
+                    best_metrics,
+                    best_value,
+                    epoch,
+                    fold_i=fold_i,
+                )
                 metrics_names, metrics_values = zip(*aggr_metrics_val.items())
                 metrics.append(list(metrics_values))
                 early_stopping(best_value)
@@ -189,40 +195,49 @@ def main(config):
             scheduler.step()
             print("lr = {:.10f}".format(optimizer.param_groups[0]["lr"]))
 
-
         # test
-        model.load_state_dict(torch.load(os.path.join(config.save_dir, "model_best.pth"))["state_dict"])
-        aggr_metrics_test, best_metrics, best_value = test(test_evaluator,tensorboard_writer,
-                    config,
-                    best_metrics,
-                    best_value,
-                    epoch,)
+        model.load_state_dict(
+            torch.load(os.path.join(config.save_dir, "model_best.pth"))["state_dict"]
+        )
+        aggr_metrics_test, best_metrics, best_value = test(
+            test_evaluator,
+            train_loader,
+            tensorboard_writer,
+            config,
+            best_metrics,
+            best_value,
+            epoch,
+            fold_i=fold_i,
+        )
 
         header = metrics_names
         metrics_filepath = os.path.join(
-        config.output_dir, "metrics_" + config.experiment_name + ".xlsx")
+            config.output_dir, "metrics_" + config.experiment_name + ".xlsx"
+        )
 
         book = utils.export_performance_metrics(
-        metrics_filepath, metrics, header, sheet_name="metrics")
+            metrics_filepath, metrics, header, sheet_name="metrics"
+        )
 
         # Export record metrics to a file accumulating records from all experiments
         utils.register_test_record(
-        config.records_file,
-        config.initial_timestamp,
-        config.experiment_name,
-        best_metrics,
-        aggr_metrics_val,
-        aggr_metrics_test,
-        comment=config.comment)
+            config.records_file,
+            config.initial_timestamp,
+            config.experiment_name,
+            best_metrics,
+            aggr_metrics_val,
+            aggr_metrics_test,
+            comment=config.comment,
+        )
 
         logger.info(
-        f"Fold {fold_i} best {config.key_metric} was {best_value}. Other metrics: {best_metrics}"
+            f"Fold {fold_i} best {config.key_metric} was {best_value}. Other metrics: {best_metrics}"
         )
 
         total_runtime = time.time() - total_start_time
         logger.info(
-            "Fold {} total runtime: {} hours, {} minutes, {} seconds\n".format(fold_i,
-                *utils.readable_time(total_runtime)
+            "Fold {} total runtime: {} hours, {} minutes, {} seconds\n".format(
+                fold_i, *utils.readable_time(total_runtime)
             )
         )
 
@@ -235,9 +250,10 @@ if __name__ == "__main__":
     logger.info("Loading packages ...")
 
     args = Options().parse()  # `argparse` object
-    config = setup(args)
+    origin_comment = args.comment
     for ii in range(args.itr):
         args_itr = copy.deepcopy(args)  # prevent itr forloop to change output_dir
         args_itr.seed = args_itr.seed + ii  # change seed for each iteration
         config = setup(args_itr)  # save experiment files itr times
+        config.comment = origin_comment + f" itr{ii}"
         main(config)

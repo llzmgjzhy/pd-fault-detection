@@ -41,6 +41,12 @@ class Options(object):
             default="./records.xlsx",
             help="Excel file keeping all records of experiments",
         )
+        self.parser.add_argument(
+            "--comment",
+            type=str,
+            default="",
+            help="A comment/description of the experiment",
+        )
 
         # data loader
         self.parser.add_argument(
@@ -182,6 +188,11 @@ class Options(object):
             "--patch_size", type=int, default=64, help="patch_size"
         )
         self.parser.add_argument("--stride", type=int, default=64, help="stride")
+        self.parser.add_argument(
+            "--model_name",
+            default="patchtst",
+            help="Model class",
+        )
         self.parser.add_argument(
             "--d_model",
             type=int,

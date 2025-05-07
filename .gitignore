@@ -11,3 +11,6 @@ temp.py
 *.npy
 *.csv
 *.parquet
+
+# experiment
+experiments/
