@@ -17,6 +17,8 @@ logger = logging.getLogger("__main__")
 
 NEG_METRICS = {"loss", "mse_loss"}
 
+val_times = {"total_time": 0, "count": 0}
+
 
 def setup(args):
     """Prepare training session: read configuration from file (takes precedence), create directories.
@@ -144,9 +146,9 @@ class Anomaly_Detection_Runner(BaseRunner):
 
             X, targets = batch
             X = X.float().to(device=self.device)
-            outputs = self.model(X)
+            outputs = self.model(X[:, : -self.config.pred_len, :])
 
-            loss = self.loss_module(X, outputs)
+            loss = self.loss_module(X[:, -self.config.pred_len :, :], outputs)
             batch_loss = loss.sum()
             mean_loss = loss.mean()
 
@@ -188,9 +190,9 @@ class Anomaly_Detection_Runner(BaseRunner):
 
             X, targets = batch
             X = X.float().to(self.device)
-            outputs = self.model(X)
+            outputs = self.model(X[:, : -self.config.pred_len, :])
 
-            loss = self.loss_module(X, outputs)
+            loss = self.loss_module(X[:, -self.config.pred_len :, :], outputs)
             batch_loss = loss.sum()
             mean_loss = loss.mean()  # mean loss (over samples)
             # (batch_size,) loss for each sample in the batch
@@ -230,9 +232,9 @@ class Anomaly_Detection_Runner(BaseRunner):
             for i, batch in enumerate(train_loader):
                 X, _ = batch
                 X = X.float().to(self.device)
-                outputs = self.model(X)
+                outputs = self.model(X[:, : -self.config.pred_len, :])
 
-                loss = self.loss_module(X, outputs)
+                loss = self.loss_module(X[:, -self.config.pred_len :, :], outputs)
 
                 # cal score
                 score = torch.mean(loss, dim=-1).detach().cpu().numpy()
@@ -247,9 +249,9 @@ class Anomaly_Detection_Runner(BaseRunner):
         for i, batch in enumerate(self.dataloader):
             X, targets = batch
             X = X.float().to(self.device)
-            outputs = self.model(X)
+            outputs = self.model(X[:, : -self.config.pred_len, :])
 
-            loss = self.loss_module(X, outputs)
+            loss = self.loss_module(X[:, -self.config.pred_len :, :], outputs)
 
             # cal score
             score = torch.mean(loss, dim=-1).detach().cpu().numpy()
@@ -296,7 +298,7 @@ def validate(
     logger.info("Evaluating on validation set ...")
     eval_start_time = time.time()
     with torch.no_grad():
-        aggr_metrics = val_evaluator.evaluate(epoch, keep_all=False, stage="val")
+        aggr_metrics = val_evaluator.evaluate(epoch, keep_all=False)
     eval_runtime = time.time() - eval_start_time
     logger.info(
         "Validation runtime: {} hours, {} minutes, {} seconds\n".format(

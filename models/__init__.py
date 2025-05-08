@@ -1,4 +1,4 @@
-from patchtst import PatchTST
+from .patchtst import PatchTST
 
 model_factory = {
     "patchtst": PatchTST,

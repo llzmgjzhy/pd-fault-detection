@@ -70,13 +70,13 @@ class Options(object):
 
         # forecasting task
         self.parser.add_argument(
-            "--seq_len", type=int, default=512, help="input sequence length"
+            "--seq_len", type=int, default=800000, help="input sequence length"
         )
         self.parser.add_argument(
             "--label_len", type=int, default=48, help="start token length"
         )
         self.parser.add_argument(
-            "--pred_len", type=int, default=96, help="prediction sequence length"
+            "--pred_len", type=int, default=512, help="prediction sequence length"
         )
         self.parser.add_argument(
             "--seasonal_patterns", type=str, default="Monthly", help="subset for M4"
@@ -185,9 +185,9 @@ class Options(object):
 
         # Model
         self.parser.add_argument(
-            "--patch_size", type=int, default=64, help="patch_size"
+            "--patch_size", type=int, default=1000, help="patch_size"
         )
-        self.parser.add_argument("--stride", type=int, default=64, help="stride")
+        self.parser.add_argument("--stride", type=int, default=1000, help="stride")
         self.parser.add_argument(
             "--model_name",
             default="patchtst",
@@ -196,11 +196,11 @@ class Options(object):
         self.parser.add_argument(
             "--d_model",
             type=int,
-            default=64,
+            default=128,
             help="Internal dimension of transformer embeddings",
         )
         self.parser.add_argument(
-            "--num_layers",
+            "--n_layers",
             type=int,
             default=3,
             help="Number of transformer encoder layers (blocks)",
@@ -224,10 +224,10 @@ class Options(object):
             help="Activation to be used in transformer encoder",
         )
         self.parser.add_argument(
-            "--normalization_layer",
-            choices={"BatchNorm", "LayerNorm"},
-            default="BatchNorm",
-            help="Normalization layer to be used internally in transformer encoder",
+            "--enc_in",
+            type=int,
+            default=3,
+            help="Number of input features (channels) in the input time series",
         )
         self.parser.add_argument(
             "--split_num",
@@ -244,7 +244,7 @@ class Options(object):
         self.parser.add_argument(
             "--d_ff",
             type=int,
-            default=32,
+            default=512,
             help="dimension of fcn",
         )
         self.parser.add_argument(

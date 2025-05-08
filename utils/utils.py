@@ -5,11 +5,14 @@ import numpy as np
 from openpyxl import Workbook, load_workbook
 
 import logging
+import sys
+import builtins
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s : %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
 
 def matthews_correlation(y_true, y_pred):
     """Calculates the Matthews correlation coefficient measure for quality of binary classification problems."""
@@ -71,6 +74,23 @@ def stratified_train_val_test_split(X, y, num_folds=5, seed=42):
         fold_splits.append((train_idx, val_idx, test_idx))
 
     return fold_splits
+
+
+class Printer(object):
+    """Class for printing output by refreshing the same line in the console, e.g. for indicating progress of a process"""
+
+    def __init__(self, console=True):
+
+        if console:
+            self.print = self.dyn_print
+        else:
+            self.print = builtins.print
+
+    @staticmethod
+    def dyn_print(data):
+        """Print things to stdout on one line, refreshing it dynamically"""
+        sys.stdout.write("\r\x1b[K" + data.__str__())
+        sys.stdout.flush()
 
 
 def readable_time(time_difference):
