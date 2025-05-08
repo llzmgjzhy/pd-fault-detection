@@ -1,3 +1,3 @@
-from patchTST import PatchTST
+from .patchTST import PatchTST
 
 __all__ = ["PatchTST"]

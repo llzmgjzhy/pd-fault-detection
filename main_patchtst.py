@@ -72,7 +72,7 @@ def main(config):
 
         # load model
         model_class = model_factory[config.model_name]
-        model = model_class(config, device)
+        model = model_class(config).to(device)
 
         early_stopping = EarlyStopping(patience=config.patience)
 

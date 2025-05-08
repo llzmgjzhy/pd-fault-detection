@@ -15,7 +15,7 @@ class TimeSeriesTrainDataset(Dataset):
             print(f"Warning: Path {self.img_path} does not exist.")
             return None
         signal = np.load(
-            self.img_path / f"signals_{self.signal_ids[index]}.npy"
+            os.path.join(self.img_path, f"signals_{self.signal_ids[index]}.npy")
         ).astype(np.float32)
         signal = np.transpose(signal, (1, 0))
 
@@ -37,7 +37,7 @@ class TimeSeriesTestDataset(Dataset):
             print(f"Warning: Path {self.img_path} does not exist.")
             return None
         signal = np.load(
-            self.img_path / f"signals_{self.signal_ids[index]}.npy"
+            os.path.join(self.img_path, f"signals_{self.signal_ids[index]}.npy")
         ).astype(np.float32)
         signal = np.transpose(signal, (1, 0))
 
