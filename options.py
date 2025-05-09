@@ -175,7 +175,7 @@ class Options(object):
         )
         self.parser.add_argument(
             "--key_metric",
-            choices={"loss", "accuracy", "precision", "mcc", "mse_loss"},
+            choices={"loss", "accuracy", "precision", "mcc", "mse"},
             default="loss",
             help="Metric used for defining best epoch",
         )

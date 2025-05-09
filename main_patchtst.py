@@ -197,18 +197,11 @@ def main(config):
 
         # test
         model.load_state_dict(
-            torch.load(os.path.join(config.save_dir, "model_best.pth"))["state_dict"]
+            torch.load(
+                os.path.join(config.save_dir, "model_best.pth"), weights_only=True
+            )["state_dict"]
         )
-        aggr_metrics_test, best_metrics, best_value = test(
-            test_evaluator,
-            train_loader,
-            tensorboard_writer,
-            config,
-            best_metrics,
-            best_value,
-            epoch,
-            fold_i=fold_i,
-        )
+        aggr_metrics_test = test(test_evaluator)
 
         header = metrics_names
         metrics_filepath = os.path.join(
@@ -220,6 +213,8 @@ def main(config):
         )
 
         # Export record metrics to a file accumulating records from all experiments
+        # add fold info
+        comment = config.comment + f"_fold_{fold_i}"
         utils.register_test_record(
             config.records_file,
             config.initial_timestamp,
@@ -227,7 +222,7 @@ def main(config):
             best_metrics,
             aggr_metrics_val,
             aggr_metrics_test,
-            comment=config.comment,
+            comment=comment,
         )
 
         logger.info(

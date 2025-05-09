@@ -15,7 +15,7 @@ from utils.utils import matthews_correlation
 
 logger = logging.getLogger("__main__")
 
-NEG_METRICS = {"loss", "mse_loss"}
+NEG_METRICS = {"loss", "mse"}
 
 val_times = {"total_time": 0, "count": 0}
 
@@ -78,6 +78,10 @@ def pipeline_factory(config):
 
     if task == "fault_detection":
         return Anomaly_Detection_Runner
+
+    if task == "classification":
+        return ClassificationRunner
+
     else:
         raise NotImplementedError("Task '{}' not implemented".format(task))
 
@@ -146,9 +150,9 @@ class Anomaly_Detection_Runner(BaseRunner):
 
             X, targets = batch
             X = X.float().to(device=self.device)
-            outputs = self.model(X[:, : -self.config.pred_len, :])
+            outputs = self.model(X)
 
-            loss = self.loss_module(X[:, -self.config.pred_len :, :], outputs)
+            loss = self.loss_module(X, outputs)
             batch_loss = loss.sum()
             mean_loss = loss.mean()
 
@@ -190,9 +194,9 @@ class Anomaly_Detection_Runner(BaseRunner):
 
             X, targets = batch
             X = X.float().to(self.device)
-            outputs = self.model(X[:, : -self.config.pred_len, :])
+            outputs = self.model(X)
 
-            loss = self.loss_module(X[:, -self.config.pred_len :, :], outputs)
+            loss = self.loss_module(X, outputs)
             batch_loss = loss.sum()
             mean_loss = loss.mean()  # mean loss (over samples)
             # (batch_size,) loss for each sample in the batch
@@ -232,9 +236,9 @@ class Anomaly_Detection_Runner(BaseRunner):
             for i, batch in enumerate(train_loader):
                 X, _ = batch
                 X = X.float().to(self.device)
-                outputs = self.model(X[:, : -self.config.pred_len, :])
+                outputs = self.model(X)
 
-                loss = self.loss_module(X[:, -self.config.pred_len :, :], outputs)
+                loss = self.loss_module(X, outputs)
 
                 # cal score
                 score = torch.mean(loss, dim=-1).detach().cpu().numpy()
@@ -249,9 +253,9 @@ class Anomaly_Detection_Runner(BaseRunner):
         for i, batch in enumerate(self.dataloader):
             X, targets = batch
             X = X.float().to(self.device)
-            outputs = self.model(X[:, : -self.config.pred_len, :])
+            outputs = self.model(X)
 
-            loss = self.loss_module(X[:, -self.config.pred_len :, :], outputs)
+            loss = self.loss_module(X, outputs)
 
             # cal score
             score = torch.mean(loss, dim=-1).detach().cpu().numpy()
@@ -288,6 +292,120 @@ class Anomaly_Detection_Runner(BaseRunner):
         self.epoch_metrics["mcc"] = mcc
 
         return self.epoch_metrics
+
+
+class ClassificationRunner(BaseRunner):
+    def __init__(self, *args, **kwargs):
+
+        super(ClassificationRunner, self).__init__(*args, **kwargs)
+
+    def train_epoch(self, epoch_num=None):
+
+        self.model = self.model.train()
+
+        epoch_loss = 0  # total loss of epoch
+        total_samples = 0  # total samples in epoch
+
+        for i, batch in enumerate(self.dataloader):
+            self.optimizer.zero_grad()
+
+            X, targets = batch
+            X = X.float().to(device=self.device)
+            targets = targets.to(device=self.device)
+            outputs = self.model(X)
+
+            loss = self.loss_module(outputs, targets)
+            batch_loss = loss.sum()
+            mean_loss = loss.mean()
+
+            backward_loss = mean_loss
+
+            backward_loss.backward()
+            self.optimizer.step()
+
+            metrics = {"loss": mean_loss.item()}
+            if i % self.print_interval == 0:
+                ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
+                self.print_callback(i, metrics, prefix="Training " + ending)
+
+            with torch.no_grad():
+                total_samples += loss.numel()
+                epoch_loss += batch_loss.item()  # add total loss of batch
+
+        epoch_loss = (
+            epoch_loss / total_samples
+        )  # average loss per sample for whole epoch
+        self.epoch_metrics["epoch"] = epoch_num
+        self.epoch_metrics["loss"] = epoch_loss
+        return self.epoch_metrics
+
+    def evaluate(self, epoch_num=None, keep_all=False):
+
+        self.model = self.model.eval()
+
+        epoch_loss = 0  # total loss of epoch
+        total_samples = 0  # total samples in epoch
+
+        per_batch = {
+            "target_masks": [],
+            "targets": [],
+            "outputs": [],
+            "metrics": [],
+        }
+        for i, batch in enumerate(self.dataloader):
+
+            X, targets = batch
+            X = X.float().to(device=self.device)
+            targets = targets.to(device=self.device)
+            outputs = self.model(X)
+
+            loss = self.loss_module(outputs, targets)
+            batch_loss = loss.sum()
+            mean_loss = loss.mean()  # mean loss (over samples)
+            # (batch_size,) loss for each sample in the batch
+
+            per_batch["targets"].append(targets.half().cpu().numpy())
+            per_batch["outputs"].append(outputs.half().cpu().numpy())
+            per_batch["metrics"].append([loss.half().cpu().numpy()])
+
+            metrics = {
+                "loss": mean_loss,
+            }
+            if i % self.print_interval == 0:
+                ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
+                self.print_callback(i, metrics, prefix="Evaluating " + ending)
+
+            total_samples += loss.numel()
+            epoch_loss += batch_loss.half().cpu().item()
+
+        epoch_loss = (
+            epoch_loss / total_samples
+        )  # average loss per element for whole epoch
+        self.epoch_metrics["epoch"] = epoch_num
+        self.epoch_metrics["loss"] = epoch_loss
+
+        pred = torch.from_numpy(np.concatenate(per_batch["outputs"], axis=0))
+        test_labels = np.concatenate(per_batch["targets"], axis=0).reshape(-1)
+
+        pred = np.argmax(pred, axis=1)
+        gt = np.array(test_labels).astype(int)
+
+        accuracy = accuracy_score(gt, pred)
+        precision, recall, f_score, support = precision_recall_fscore_support(
+            gt, pred, average="binary"
+        )
+        mcc = matthews_correlation(gt, pred).item()
+
+        self.epoch_metrics["accuracy"] = accuracy
+        self.epoch_metrics["precision"] = precision
+        self.epoch_metrics["recall"] = recall
+        self.epoch_metrics["f1"] = f_score
+        self.epoch_metrics["mcc"] = mcc
+
+        if keep_all:
+            return self.epoch_metrics, per_batch
+        else:
+            return self.epoch_metrics
 
 
 def validate(
@@ -333,27 +451,24 @@ def validate(
         condition = aggr_metrics[config.key_metric] > best_value
     if condition:
         best_value = aggr_metrics[config.key_metric]
-        if not config.no_savemodel:
-            utils.save_model(
-                os.path.join(config.save_dir, "model_best.pth"),
-                epoch,
-                val_evaluator.model,
-            )
+        utils.save_model(
+            os.path.join(config.save_dir, "model_best.pth"),
+            epoch,
+            val_evaluator.model,
+        )
         best_metrics = aggr_metrics.copy()
 
     return aggr_metrics, best_metrics, best_value
 
 
-def test(
-    test_evaluator,
-    train_loader,
-):
+def test(test_evaluator):
     """Run an evaluation on the validation set while logging metrics, and handle outcome"""
 
     logger.info("Testing on test set ...")
     eval_start_time = time.time()
     with torch.no_grad():
-        aggr_metrics = test_evaluator.test(train_loader=train_loader)
+        aggr_metrics = test_evaluator.evaluate(keep_all=False)
+        del aggr_metrics["epoch"]
     eval_runtime = time.time() - eval_start_time
     logger.info(
         "Testing runtime: {} hours, {} minutes, {} seconds\n".format(
