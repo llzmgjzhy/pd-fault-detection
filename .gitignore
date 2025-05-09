@@ -14,3 +14,6 @@ temp.py
 
 # experiment
 experiments/
+
+# results file
+*.xlsx
