@@ -209,7 +209,10 @@ def main(config):
         )
 
         book = utils.export_performance_metrics(
-            metrics_filepath, metrics, header, sheet_name="metrics"
+            metrics_filepath,
+            metrics,
+            header,
+            sheet_name=f"metrics_fold_{fold_i}",
         )
 
         # Export record metrics to a file accumulating records from all experiments

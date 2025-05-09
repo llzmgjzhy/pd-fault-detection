@@ -108,6 +108,9 @@ def export_performance_metrics(
 ):
     """Exports performance metrics on the validation set for all epochs to an excel file"""
 
+    if os.path.exists(filepath):  # Create a records file for the first time
+        book = load_workbook(filepath)
+
     if book is None:
         book = Workbook()  # new excel work book
         del book["Sheet"]  # remove default sheet
