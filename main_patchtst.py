@@ -178,7 +178,7 @@ def main(config):
 
             if (epoch == config.epochs) or (epoch % config.val_interval == 0):
                 aggr_metrics_val, best_metrics, best_value = validate(
-                    test_evaluator,
+                    val_evaluator,
                     tensorboard_writer,
                     config,
                     best_metrics,

@@ -17,7 +17,7 @@ class TimeSeriesTrainDataset(Dataset):
         signal = np.load(
             os.path.join(self.img_path, f"signals_{self.signal_ids[index]}.npy")
         ).astype(np.float32)
-        signal = np.transpose(signal, (1, 0))
+        signal = np.transpose(signal, (1, 0))  # [800000, 3]
 
         label = self.labels[index]
         return (signal, label)
