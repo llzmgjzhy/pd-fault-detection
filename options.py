@@ -68,7 +68,7 @@ class Options(object):
             help="data file",
         )
 
-        # forecasting task
+        # task
         self.parser.add_argument(
             "--seq_len", type=int, default=800000, help="input sequence length"
         )
@@ -188,6 +188,9 @@ class Options(object):
             "--patch_size", type=int, default=1000, help="patch_size"
         )
         self.parser.add_argument("--stride", type=int, default=1000, help="stride")
+        self.parser.add_argument(
+            "--window_num", type=int, default=16, help="number of window in stage1"
+        )
         self.parser.add_argument(
             "--model_name",
             default="patchtst",
