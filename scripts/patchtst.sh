@@ -4,7 +4,7 @@ patch_size=1000
 stride=1000
 model=patchtst
 batch_size=32
-epochs=2
+epochs=100
 lr=1e-3
 itr=1
 task=classification
@@ -29,11 +29,11 @@ python main_patchtst.py \
     --seq_len $seq_len \
     --pred_len $pred_len \
     --d_model 128 \
-    --n_heads 6 \
+    --n_heads 4 \
     --d_ff 512 \
     --dropout 0.1 \
     --enc_in 3 \
     --patch_size $patch_size \
     --stride $stride \
     --n_layer 6 \
-    --patience 30 \
+    --patience 100 \

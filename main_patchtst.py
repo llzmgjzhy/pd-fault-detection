@@ -64,6 +64,7 @@ def main(config):
     )
 
     for fold_i, (train_idx, val_idx, test_idx) in enumerate(splits):
+        fold_start_time = time.time()
 
         # build data
         train_loader, val_loader, test_loader = dataloader_provider(
@@ -232,12 +233,19 @@ def main(config):
             f"Fold {fold_i} best {config.key_metric} was {best_value}. Other metrics: {best_metrics}"
         )
 
-        total_runtime = time.time() - total_start_time
+        fold_runtime = time.time() - fold_start_time
         logger.info(
             "Fold {} total runtime: {} hours, {} minutes, {} seconds\n".format(
-                fold_i, *utils.readable_time(total_runtime)
+                fold_i, *utils.readable_time(fold_runtime)
             )
         )
+
+    total_runtime = time.time() - total_start_time
+    logger.info(
+        "Fold {} total runtime: {} hours, {} minutes, {} seconds\n".format(
+            fold_i, *utils.readable_time(total_runtime)
+        )
+    )
 
 
 if __name__ == "__main__":

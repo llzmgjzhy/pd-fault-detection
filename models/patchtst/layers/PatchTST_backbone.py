@@ -11,6 +11,7 @@ import numpy as np
 # from collections import OrderedDict
 from .PatchTST_layers import *
 from .RevIN import RevIN
+from flash_attn.modules.mha import MHA
 
 
 # Cell
@@ -36,7 +37,7 @@ class PatchTST_backbone(nn.Module):
         key_padding_mask: bool = "auto",
         padding_var: Optional[int] = None,
         attn_mask: Optional[Tensor] = None,
-        res_attention: bool = True,
+        res_attention: bool = False,
         pre_norm: bool = False,
         store_attn: bool = False,
         pe: str = "zeros",
@@ -307,14 +308,19 @@ class TSTEncoderLayer(nn.Module):
 
         # Multi-Head attention
         self.res_attention = res_attention
-        self.self_attn = _MultiheadAttention(
+        # self.self_attn = _MultiheadAttention(
+        #     d_model,
+        #     n_heads,
+        #     d_k,
+        #     d_v,
+        #     attn_dropout=attn_dropout,
+        #     proj_dropout=dropout,
+        #     res_attention=res_attention,
+        # )
+        self.self_attn = FlashMultiHeadAttention(
             d_model,
             n_heads,
-            d_k,
-            d_v,
-            attn_dropout=attn_dropout,
-            proj_dropout=dropout,
-            res_attention=res_attention,
+            dropout=attn_dropout,
         )
 
         # Add & Norm
@@ -368,11 +374,8 @@ class TSTEncoderLayer(nn.Module):
                 attn_mask=attn_mask,
             )
         else:
-            src2, attn = self.self_attn(
-                src, src, src, key_padding_mask=key_padding_mask, attn_mask=attn_mask
-            )
-        if self.store_attn:
-            self.attn = attn
+            src2 = self.self_attn(src)
+
         ## Add & Norm
         src = src + self.dropout_attn(
             src2
@@ -396,6 +399,21 @@ class TSTEncoderLayer(nn.Module):
             return src, scores
         else:
             return src
+
+
+class FlashMultiHeadAttention(nn.Module):
+    def __init__(self, d_model, n_heads, dropout=0.0):
+        super().__init__()
+        self.attn = MHA(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=dropout,
+        )
+
+    def forward(self, x, key_padding_mask=None):
+        # input shape is [bs, seq_len, d_model]
+        # key_padding_mask: [bs, seq_len] -> bool, True indicates that the position has been masked off
+        return self.attn(x, key_padding_mask=key_padding_mask)
 
 
 class _MultiheadAttention(nn.Module):

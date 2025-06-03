@@ -51,7 +51,7 @@ class PatchTST(nn.Module):
         key_padding_mask = getattr(config, "key_padding_mask", "auto")
         padding_var = getattr(config, "padding_var", None)
         attn_mask = getattr(config, "attn_mask", None)
-        res_attention = getattr(config, "res_attention", True)
+        res_attention = getattr(config, "res_attention", False)
         pre_norm = getattr(config, "pre_norm", False)
         store_attn = getattr(config, "store_attn", False)
         pe = getattr(config, "pe", "zeros")
