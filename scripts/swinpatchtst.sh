@@ -12,6 +12,7 @@ task=classification
 python main_patchtst.py \
     --task $task \
     --comment "$task using $model" \
+    --details "change classify head, using all patch to classify" \
     --name "${task}_vsb" \
     --root_path ./dataset \
     --meta_path vsb-power-line-fault-detection \

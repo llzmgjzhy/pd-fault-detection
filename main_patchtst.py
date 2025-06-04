@@ -218,6 +218,7 @@ def main(config):
 
         # Export record metrics to a file accumulating records from all experiments
         # add fold info
+        del aggr_metrics_val["epoch"]  # remove epoch from final metrics
         comment = config.comment + f"_fold_{fold_i}"
         utils.register_test_record(
             config.records_file,
@@ -242,8 +243,8 @@ def main(config):
 
     total_runtime = time.time() - total_start_time
     logger.info(
-        "Fold {} total runtime: {} hours, {} minutes, {} seconds\n".format(
-            fold_i, *utils.readable_time(total_runtime)
+        "Total runtime: {} hours, {} minutes, {} seconds\n".format(
+            *utils.readable_time(total_runtime)
         )
     )
 

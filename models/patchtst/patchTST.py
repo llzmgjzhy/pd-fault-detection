@@ -185,7 +185,10 @@ class PatchTST(nn.Module):
                 head_dropout=head_dropout,
             )
         elif head_type == "classification":
-            self.head = ClassificationHead(c_in, d_model, 2, head_dropout=head_dropout)
+            patch_num = int((context_window - patch_len) / stride + 1)
+            self.head = ClassificationHead(
+                c_in, d_model, 2, head_dropout=head_dropout, patch_num=patch_num
+            )
 
     def create_pretrain_head(self, head_nf, vars, dropout):
         return nn.Sequential(nn.Dropout(dropout), nn.Conv1d(head_nf, vars, 1))
@@ -245,20 +248,20 @@ class Flatten_Head(nn.Module):
 
 
 class ClassificationHead(nn.Module):
-    def __init__(self, n_vars, d_model, n_classes, head_dropout):
+    def __init__(self, n_vars, d_model, n_classes, head_dropout, patch_num):
         super().__init__()
         self.flatten = nn.Flatten(start_dim=1)
         self.dropout = nn.Dropout(head_dropout)
-        self.linear = nn.Linear(n_vars * d_model, n_classes)
+        self.linear = nn.Linear(n_vars * d_model * patch_num, n_classes)
 
     def forward(self, x):
         """
         x: [bs x nvars x d_model x num_patch]
         output: [bs x n_classes]
         """
-        x = x[
-            :, :, :, -1
-        ]  # only consider the last item in the sequence, x: bs x nvars x d_model
+        # x = x[
+        #     :, :, :, -1
+        # ]  # only consider the last item in the sequence, x: bs x nvars x d_model
         x = self.flatten(x)  # x: bs x nvars * d_model
         x = self.dropout(x)
         y = self.linear(x)  # y: bs x n_classes
