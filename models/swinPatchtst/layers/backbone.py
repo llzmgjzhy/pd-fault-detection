@@ -309,18 +309,18 @@ class TSTEncoder(nn.Module):
         output = self.patch_merge1(output)
 
         # stage 2
-        output = output.reshape(-1, N // (self.n_windows // 2), L)
+        output = output.reshape(-1, (N // 2) // (self.n_windows // 2), L)
         for mod in self.layers2:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
         output = output.reshape(-1, N // 2, L)
         output = self.patch_merge2(output)
 
         # stage 3
-        output = output.reshape(-1, N // (self.n_windows // 4), L)
+        output = output.reshape(-1, (N // 4) // (self.n_windows // 2**2), L)
         for mod in self.layers3:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
         output = output.reshape(-1, N // 4, L)
-        output = self.patch_merge3(output)
+        # output = self.patch_merge3(output)
 
         return output
 

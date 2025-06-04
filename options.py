@@ -47,6 +47,12 @@ class Options(object):
             default="",
             help="A comment/description of the experiment",
         )
+        self.parser.add_argument(
+            "--details",
+            type=str,
+            default="",
+            help="A string with details of the experiment",
+        )
 
         # data loader
         self.parser.add_argument(
