@@ -291,6 +291,10 @@ class TSTEncoder(nn.Module):
         self.patch_merge2 = PatchMerging(d_model)
         self.patch_merge3 = PatchMerging(d_model)
 
+        self.cls_1 = nn.Parameter(torch.zeros(1, 1, d_model))
+        self.cls_2 = nn.Parameter(torch.zeros(1, 1, d_model))
+        self.cls_3 = nn.Parameter(torch.zeros(1, 1, d_model))
+
     def forward(
         self,
         src: Tensor,
@@ -303,26 +307,42 @@ class TSTEncoder(nn.Module):
 
         # stage 1
         output = output.reshape(-1, N // self.n_windows, L)
+        B_w, P, D = output.shape
+        cls_token = self.cls_1.expand(B_w, -1, -1).to(src.device)
+        output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
         for mod in self.layers1:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
+        cls_output1 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(-1, N, L)
         output = self.patch_merge1(output)
 
         # stage 2
         output = output.reshape(-1, (N // 2) // (self.n_windows // 2), L)
+        B_w, P, D = output.shape
+        cls_token = self.cls_2.expand(B_w, -1, -1).to(src.device)
+        output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
         for mod in self.layers2:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
+        cls_output2 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(-1, N // 2, L)
         output = self.patch_merge2(output)
 
         # stage 3
         output = output.reshape(-1, (N // 4) // (self.n_windows // 2**2), L)
+        B_w, P, D = output.shape
+        cls_token = self.cls_3.expand(B_w, -1, -1).to(src.device)
+        output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
         for mod in self.layers3:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
-        output = output.reshape(-1, N // 4, L)
+        cls_output3 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        # output = output[:, 1:, :]  # [B_w x P x D]
+        output = output.reshape(B, -1, L)
+        final_cls_output = cls_output3.reshape(B, -1, L)
         # output = self.patch_merge3(output)
 
-        return output
+        return final_cls_output
 
 
 class TSTEncoderLayer(nn.Module):
