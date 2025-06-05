@@ -5,14 +5,14 @@ window_num=16
 model=swinPatchtst
 batch_size=32
 epochs=100
-lr=1e-4
+lr=1e-3
 itr=1
 task=classification
 
 python main_patchtst.py \
     --task $task \
     --comment "$task using $model" \
-    --details "change classify head, using all patch to classify" \
+    --details "using all cls to classify" \
     --name "${task}_vsb" \
     --root_path ./dataset \
     --meta_path vsb-power-line-fault-detection \

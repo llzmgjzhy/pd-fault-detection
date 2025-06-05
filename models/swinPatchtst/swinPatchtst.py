@@ -182,7 +182,7 @@ class SwinPatchTST(nn.Module):
                 head_dropout=head_dropout,
             )
         elif head_type == "classification":
-            final_n_patch = n_windows // 2**2
+            final_n_patch = n_windows + n_windows // 2 + n_windows // 2**2
             self.head = ClassificationHead(
                 c_in, d_model, 2, head_dropout=head_dropout, patch_num=final_n_patch
             )
