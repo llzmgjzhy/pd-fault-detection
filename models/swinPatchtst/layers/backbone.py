@@ -312,7 +312,10 @@ class TSTEncoder(nn.Module):
         output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
         for mod in self.layers1:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
-        cls_output1 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+
+        cls_output1 = output[:, 0, :].unsqueeze(1)  # [B_w x D]
+        cls_output1 = cls_output1.reshape(B, -1, L)  # [B x 1 x D]
+
         output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(-1, N, L)
         output = self.patch_merge1(output)
@@ -325,6 +328,7 @@ class TSTEncoder(nn.Module):
         for mod in self.layers2:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
         cls_output2 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        cls_output2 = cls_output2.reshape(B, -1, L)  # [B x 1 x D]
         output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(-1, N // 2, L)
         output = self.patch_merge2(output)
@@ -337,9 +341,12 @@ class TSTEncoder(nn.Module):
         for mod in self.layers3:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
         cls_output3 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        cls_output3 = cls_output3.reshape(B, -1, L)  # [B x 1 x D]
         # output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(B, -1, L)
-        final_cls_output = cls_output3.reshape(B, -1, L)
+        final_cls_output = torch.cat(
+            (cls_output1, cls_output2, cls_output3), dim=1
+        )  # [B_w x 3 x D]
         # output = self.patch_merge3(output)
 
         return final_cls_output
