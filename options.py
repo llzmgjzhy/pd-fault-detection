@@ -246,7 +246,7 @@ class Options(object):
         )
         self.parser.add_argument(
             "--loss",
-            choices={"cross_entropy", "focal", "mse"},
+            choices={"cross_entropy", "focal", "mse", "bce"},
             default="cross_entropy",
             help="loss used for train model",
         )

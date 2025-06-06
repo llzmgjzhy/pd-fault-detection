@@ -199,7 +199,7 @@ class TSTiEncoder(nn.Module):  # i means channel-independent
         u = torch.reshape(
             x, (x.shape[0] * x.shape[1], x.shape[2], x.shape[3])
         )  # u: [bs * nvars x patch_num x d_model]
-        u = self.dropout(u + self.W_pos)  # u: [bs * nvars x patch_num x d_model]
+        u = self.dropout(u)  # u: [bs * nvars x patch_num x d_model]
 
         # Encoder
         z = self.encoder(u)  # z: [bs * nvars x patch_num x d_model]
@@ -231,6 +231,7 @@ class TSTEncoder(nn.Module):
     ):
         super().__init__()
         self.n_windows = n_windows
+        self.W_pos = positional_encoding("zeros", True, 50, d_model)
 
         self.layers1 = nn.ModuleList(
             [
@@ -307,6 +308,7 @@ class TSTEncoder(nn.Module):
 
         # stage 1
         output = output.reshape(-1, N // self.n_windows, L)
+        output = output + self.W_pos  # [B_w x P x D]
         B_w, P, D = output.shape
         cls_token = self.cls_1.expand(B_w, -1, -1).to(src.device)
         output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
@@ -322,6 +324,7 @@ class TSTEncoder(nn.Module):
 
         # stage 2
         output = output.reshape(-1, (N // 2) // (self.n_windows // 2), L)
+        output = output + self.W_pos  # [B_w x P x D]
         B_w, P, D = output.shape
         cls_token = self.cls_2.expand(B_w, -1, -1).to(src.device)
         output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
@@ -335,6 +338,7 @@ class TSTEncoder(nn.Module):
 
         # stage 3
         output = output.reshape(-1, (N // 4) // (self.n_windows // 2**2), L)
+        output = output + self.W_pos  # [B_w x P x D]
         B_w, P, D = output.shape
         cls_token = self.cls_3.expand(B_w, -1, -1).to(src.device)
         output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
