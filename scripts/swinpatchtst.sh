@@ -5,14 +5,14 @@ window_num=16
 model=swinPatchtst
 batch_size=32
 epochs=100
-lr=1e-3
+lr=5e-4
 itr=1
 task=classification
 
 python main_patchtst.py \
     --task $task \
     --comment "$task using $model" \
-    --details "add relative position embed; use window cls to fault detection; loss use bce." \
+    --details "use q to query cls, only use q to get classify result" \
     --name "${task}_vsb" \
     --root_path ./dataset \
     --meta_path vsb-power-line-fault-detection \
@@ -21,7 +21,7 @@ python main_patchtst.py \
     --records_file vsb_$task.xlsx \
     --model_name $model \
     --epochs $epochs \
-    --loss bce \
+    --loss cross_entropy \
     --key_metric mcc \
     --seed 2025 \
     --batch_size $batch_size \
@@ -29,8 +29,8 @@ python main_patchtst.py \
     --itr $itr \
     --seq_len $seq_len \
     --d_model 128 \
-    --n_heads 4 \
-    --d_ff 512 \
+    --n_heads 8 \
+    --d_ff 256 \
     --dropout 0.1 \
     --enc_in 3 \
     --patch_size $patch_size \

@@ -6,6 +6,7 @@ import torch
 
 from .layers.backbone import SwinPatchTST_backbone
 from .layers.SwinPatchTST_layers import series_decomp
+from flash_attn.modules.mha import MHA
 
 
 class SwinPatchTST(nn.Module):
@@ -27,8 +28,8 @@ class SwinPatchTST(nn.Module):
         d_model = config.d_model
         d_ff = config.d_ff
         dropout = config.dropout
-        fc_dropout = getattr(config, "fc_dropout", 0.0)
-        head_dropout = getattr(config, "head_dropout", 0.0)
+        fc_dropout = config.dropout
+        head_dropout = config.dropout
 
         individual = getattr(config, "individual", False)
 
@@ -186,7 +187,9 @@ class SwinPatchTST(nn.Module):
             # self.head = ClassificationHead(
             #     c_in, d_model, 2, head_dropout=head_dropout, patch_num=final_n_patch
             # )
-            self.head = windowClassification(d_model, head_dropout=head_dropout)
+            self.head = windowClassification(
+                d_model, n_heads, head_dropout=head_dropout
+            )
         elif head_type == "windowClassification":
             self.head = windowClassification(d_model, head_dropout=head_dropout)
 
@@ -269,11 +272,19 @@ class ClassificationHead(nn.Module):
 
 
 class windowClassification(nn.Module):
-    def __init__(self, d_model, head_dropout):
+    def __init__(self, d_model, n_heads, head_dropout):
         super().__init__()
-        self.dropout = nn.Dropout(head_dropout)
-        self.cls_score = nn.Sequential(
-            nn.Linear(d_model, d_model), nn.GELU(), nn.Linear(d_model, 1)
+        self.query = nn.Parameter(torch.randn(1, 1, d_model))
+        self.attn = MHA(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=head_dropout,
+        )
+        self.mlp = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(d_model // 2, 2),
         )
 
     def forward(self, x):
@@ -283,7 +294,11 @@ class windowClassification(nn.Module):
         """
 
         x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
-        x = self.cls_score(x)  # x: bs x nvars x n_window x 1
         x = x.mean(dim=1)
-        y = x.topk(k=3, dim=1).values.mean(dim=1)
-        return y.squeeze(-1)  # y: bs x 1
+        B, N, D = x.shape
+        q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
+        x_all = torch.cat((q, x), dim=1)  # x_all: bs x (1 + n_window) x d_model
+        out = self.attn(x_all)
+        out = out[:, 0, :]  # out: bs x d_model (the first token is the query)
+
+        return self.mlp(out)  # y: bs x 1
