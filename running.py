@@ -387,8 +387,8 @@ class ClassificationRunner(BaseRunner):
         pred = torch.from_numpy(np.concatenate(per_batch["outputs"], axis=0))
         test_labels = np.concatenate(per_batch["targets"], axis=0).reshape(-1)
 
-        # pred = np.argmax(pred, axis=1)
-        pred = (pred > 0.5).cpu().numpy().astype(int)
+        pred = np.argmax(pred, axis=1)
+        # pred = (pred > 0.5).cpu().numpy().astype(int)
         gt = np.array(test_labels).astype(int)
 
         accuracy = accuracy_score(gt, pred)
