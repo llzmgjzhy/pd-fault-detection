@@ -183,9 +183,12 @@ class SwinPatchTST(nn.Module):
             )
         elif head_type == "classification":
             final_n_patch = n_windows + n_windows // 2 + n_windows // 2**2
-            self.head = ClassificationHead(
-                c_in, d_model, 2, head_dropout=head_dropout, patch_num=final_n_patch
-            )
+            # self.head = ClassificationHead(
+            #     c_in, d_model, 2, head_dropout=head_dropout, patch_num=final_n_patch
+            # )
+            self.head = windowClassification(d_model, head_dropout=head_dropout)
+        elif head_type == "windowClassification":
+            self.head = windowClassification(d_model, head_dropout=head_dropout)
 
     def create_pretrain_head(self, head_nf, vars, dropout):
         return nn.Sequential(nn.Dropout(dropout), nn.Conv1d(head_nf, vars, 1))
@@ -263,3 +266,24 @@ class ClassificationHead(nn.Module):
         x = self.dropout(x)
         y = self.linear(x)  # y: bs x n_classes
         return y
+
+
+class windowClassification(nn.Module):
+    def __init__(self, d_model, head_dropout):
+        super().__init__()
+        self.dropout = nn.Dropout(head_dropout)
+        self.cls_score = nn.Sequential(
+            nn.Linear(d_model, d_model), nn.GELU(), nn.Linear(d_model, 1)
+        )
+
+    def forward(self, x):
+        """
+        x: [bs x nvars x d_model x n_window]
+        output: [bs x n_classes]
+        """
+
+        x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
+        x = self.cls_score(x)  # x: bs x nvars x n_window x 1
+        x = x.mean(dim=1)
+        y = x.topk(k=3, dim=1).values.mean(dim=1)
+        return y.squeeze(-1)  # y: bs x 1

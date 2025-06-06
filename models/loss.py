@@ -19,6 +19,9 @@ def get_loss_module(config):
     if loss_type == "mse":
         return nn.MSELoss(reduction="none")
 
+    if loss_type == "bce":
+        return nn.BCEWithLogitsLoss(reduction="none")
+
     else:
         raise ValueError(f"Loss module for '{loss_type}' does not exist")
 

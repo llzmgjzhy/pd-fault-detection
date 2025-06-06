@@ -12,7 +12,7 @@ task=classification
 python main_patchtst.py \
     --task $task \
     --comment "$task using $model" \
-    --details "using all cls to classify" \
+    --details "add relative position embed; use window cls to fault detection; loss use bce." \
     --name "${task}_vsb" \
     --root_path ./dataset \
     --meta_path vsb-power-line-fault-detection \
@@ -21,7 +21,7 @@ python main_patchtst.py \
     --records_file vsb_$task.xlsx \
     --model_name $model \
     --epochs $epochs \
-    --loss cross_entropy \
+    --loss bce \
     --key_metric mcc \
     --seed 2025 \
     --batch_size $batch_size \
