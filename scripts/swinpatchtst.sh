@@ -12,7 +12,7 @@ task=classification
 python main_patchtst.py \
     --task $task \
     --comment "$task using $model" \
-    --details "v1.5: query to cal cross-attention with every layer's cls" \
+    --details "v1.6: only add cls in first layer, but model output all layer's cls concat." \
     --name "${task}_vsb" \
     --root_path ./dataset \
     --meta_path vsb-power-line-fault-detection \

@@ -280,7 +280,7 @@ class windowClassification(nn.Module):
         )
         self.mlp = nn.Sequential(
             nn.Linear(d_model, 2),
-            nn.Dropout(0.1),
+            nn.Dropout(head_dropout),
         )
 
     def forward(self, x):
@@ -292,8 +292,8 @@ class windowClassification(nn.Module):
         x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
         x = x.mean(dim=1)
         B, N, D = x.shape
-        # q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
-        # out, _ = self.attn(q, x, x)  # out: bs x 1 x d_model
-        out = x.squeeze(1)
+        q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
+        out, _ = self.attn(q, x, x)  # out: bs x 1 x d_model
+        out = out.squeeze(1)
 
         return self.mlp(out)  # y: bs x 1
