@@ -275,16 +275,12 @@ class windowClassification(nn.Module):
     def __init__(self, d_model, n_heads, head_dropout):
         super().__init__()
         self.query = nn.Parameter(torch.randn(1, 1, d_model))
-        self.attn = MHA(
-            embed_dim=d_model,
-            num_heads=n_heads,
-            dropout=head_dropout,
+        self.attn = nn.MultiheadAttention(
+            embed_dim=d_model, num_heads=n_heads, dropout=head_dropout, batch_first=True
         )
         self.mlp = nn.Sequential(
-            nn.Linear(d_model, d_model // 2),
-            nn.ReLU(),
+            nn.Linear(d_model, 2),
             nn.Dropout(0.1),
-            nn.Linear(d_model // 2, 2),
         )
 
     def forward(self, x):
@@ -296,9 +292,8 @@ class windowClassification(nn.Module):
         x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
         x = x.mean(dim=1)
         B, N, D = x.shape
-        q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
-        x_all = torch.cat((q, x), dim=1)  # x_all: bs x (1 + n_window) x d_model
-        out = self.attn(x_all)
-        out = out[:, 0, :]  # out: bs x d_model (the first token is the query)
+        # q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
+        # out, _ = self.attn(q, x, x)  # out: bs x 1 x d_model
+        out = x.squeeze(1)
 
         return self.mlp(out)  # y: bs x 1

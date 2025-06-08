@@ -247,7 +247,7 @@ class TSTEncoder(nn.Module):
                     pre_norm=pre_norm,
                     store_attn=store_attn,
                 )
-                for i in range(n_layers // 3)
+                for i in range(n_layers // 2)
             ]
         )
         self.layers2 = nn.ModuleList(
@@ -265,7 +265,7 @@ class TSTEncoder(nn.Module):
                     pre_norm=pre_norm,
                     store_attn=store_attn,
                 )
-                for i in range(n_layers // 3)
+                for i in range(n_layers // 2)
             ]
         )
         self.layers3 = nn.ModuleList(
@@ -283,7 +283,25 @@ class TSTEncoder(nn.Module):
                     pre_norm=pre_norm,
                     store_attn=store_attn,
                 )
-                for i in range(n_layers // 3)
+                for i in range(n_layers // 2)
+            ]
+        )
+        self.layers4 = nn.ModuleList(
+            [
+                TSTEncoderLayer(
+                    d_model,
+                    n_heads=n_heads,
+                    d_k=d_k,
+                    d_v=d_v,
+                    d_ff=d_ff,
+                    norm=norm,
+                    attn_dropout=attn_dropout,
+                    dropout=dropout,
+                    activation=activation,
+                    pre_norm=pre_norm,
+                    store_attn=store_attn,
+                )
+                for i in range(n_layers // 2)
             ]
         )
 
@@ -294,6 +312,34 @@ class TSTEncoder(nn.Module):
         self.cls_1 = nn.Parameter(torch.zeros(1, 1, d_model))
         self.cls_2 = nn.Parameter(torch.zeros(1, 1, d_model))
         self.cls_3 = nn.Parameter(torch.zeros(1, 1, d_model))
+        self.cls_4 = nn.Parameter(torch.zeros(1, 1, d_model))
+
+        self.query = nn.Parameter(torch.randn(1, 1, d_model))
+
+        self.attn_1 = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=attn_dropout,
+            batch_first=True,
+        )
+        self.attn_2 = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=attn_dropout,
+            batch_first=True,
+        )
+        self.attn_3 = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=attn_dropout,
+            batch_first=True,
+        )
+        self.attn_4 = nn.MultiheadAttention(
+            embed_dim=d_model,
+            num_heads=n_heads,
+            dropout=attn_dropout,
+            batch_first=True,
+        )
 
     def forward(
         self,
@@ -305,6 +351,8 @@ class TSTEncoder(nn.Module):
         B, N, L = src.shape
         output = src
 
+        query = self.query.expand(B, -1, -1).to(src.device)  # [B x 1 x D]
+
         # stage 1
         output = output.reshape(-1, N // self.n_windows, L)
         B_w, P, D = output.shape
@@ -314,7 +362,9 @@ class TSTEncoder(nn.Module):
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
 
         cls_output1 = output[:, 0, :].unsqueeze(1)  # [B_w x D]
-        cls_output1 = cls_output1.reshape(B, -1, L)  # [B x 1 x D]
+        cls_output1 = cls_output1.reshape(B, -1, L)  # [B x n_window x D]
+
+        query, _ = self.attn_1(query, cls_output1, cls_output1)  # [B x 1 x D]
 
         output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(-1, N, L)
@@ -329,6 +379,8 @@ class TSTEncoder(nn.Module):
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
         cls_output2 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
         cls_output2 = cls_output2.reshape(B, -1, L)  # [B x 1 x D]
+
+        query, _ = self.attn_2(query, cls_output2, cls_output2)  # [B x 1 x D]
         output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(-1, N // 2, L)
         output = self.patch_merge2(output)
@@ -342,14 +394,31 @@ class TSTEncoder(nn.Module):
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
         cls_output3 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
         cls_output3 = cls_output3.reshape(B, -1, L)  # [B x 1 x D]
-        # output = output[:, 1:, :]  # [B_w x P x D]
-        output = output.reshape(B, -1, L)
+
+        query, _ = self.attn_3(query, cls_output3, cls_output3)  # [B x 1 x D]
+        output = output[:, 1:, :]  # [B_w x P x D]
+        output = output.reshape(-1, N // 2**2, L)
+        output = self.patch_merge3(output)
+
+        # stage 4
+        output = output.reshape(-1, (N // 2**3) // (self.n_windows // 2**3), L)
+        B_w, P, D = output.shape
+        cls_token = self.cls_4.expand(B_w, -1, -1).to(src.device)
+        output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
+        for mod in self.layers4:
+            output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
+        cls_output4 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        cls_output4 = cls_output4.reshape(B, -1, L)  # [B x 1 x D]
+        query, _ = self.attn_4(query, cls_output4, cls_output4)  # [B x 1 x D]
+        output = output[:, 1:, :]  # [B_w x P x D]
+        output = output.reshape(-1, N // 2**3, L)
+
         final_cls_output = torch.cat(
-            (cls_output1, cls_output2, cls_output3), dim=1
+            (cls_output1, cls_output2, cls_output3, cls_output4), dim=1
         )  # [B_w x 3 x D]
         # output = self.patch_merge3(output)
 
-        return final_cls_output
+        return query
 
 
 class TSTEncoderLayer(nn.Module):

@@ -1,7 +1,7 @@
 seq_len=800000
 patch_size=1000
 stride=1000
-window_num=16
+window_num=32
 model=swinPatchtst
 batch_size=32
 epochs=100
@@ -12,7 +12,7 @@ task=classification
 python main_patchtst.py \
     --task $task \
     --comment "$task using $model" \
-    --details "use q to query cls, only use q to get classify result" \
+    --details "v1.5: query to cal cross-attention with every layer's cls" \
     --name "${task}_vsb" \
     --root_path ./dataset \
     --meta_path vsb-power-line-fault-detection \
@@ -31,10 +31,10 @@ python main_patchtst.py \
     --d_model 128 \
     --n_heads 8 \
     --d_ff 256 \
-    --dropout 0.1 \
+    --dropout 0.2 \
     --enc_in 3 \
     --patch_size $patch_size \
     --stride $stride \
-    --n_layer 6 \
+    --n_layer 8 \
     --window_num $window_num \
     --patience 100 \
