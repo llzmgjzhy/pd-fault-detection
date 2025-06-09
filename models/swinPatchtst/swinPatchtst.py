@@ -274,11 +274,20 @@ class ClassificationHead(nn.Module):
 class windowClassification(nn.Module):
     def __init__(self, d_model, n_heads, head_dropout):
         super().__init__()
+        self.cls_fusion = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_model * 4,
+            dropout=head_dropout,
+            activation="gelu",
+            batch_first=True,
+        )
         self.query = nn.Parameter(torch.randn(1, 1, d_model))
         self.attn = nn.MultiheadAttention(
             embed_dim=d_model, num_heads=n_heads, dropout=head_dropout, batch_first=True
         )
         self.mlp = nn.Sequential(
+            nn.LayerNorm(d_model),
             nn.Linear(d_model, 2),
             nn.Dropout(head_dropout),
         )
@@ -292,6 +301,7 @@ class windowClassification(nn.Module):
         x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
         x = x.mean(dim=1)
         B, N, D = x.shape
+        x = self.cls_fusion(x)
         q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
         out, _ = self.attn(q, x, x)  # out: bs x 1 x d_model
         out = out.squeeze(1)
