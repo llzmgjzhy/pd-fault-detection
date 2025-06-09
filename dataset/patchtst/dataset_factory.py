@@ -9,6 +9,8 @@ def _create_loader(dataset_class, indices, signals_ids, labels, config):
         batch_size=config.batch_size,
         shuffle=True,
         num_workers=config.num_workers,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
 
