@@ -282,7 +282,7 @@ class windowClassification(nn.Module):
             activation="gelu",
             batch_first=True,
         )
-        self.query = nn.Parameter(torch.randn(1, 1, d_model))
+        self.query = nn.Parameter(torch.randn(1, 8, d_model))
         self.attn = nn.MultiheadAttention(
             embed_dim=d_model, num_heads=n_heads, dropout=head_dropout, batch_first=True
         )
@@ -304,6 +304,7 @@ class windowClassification(nn.Module):
         x = self.cls_fusion(x)
         q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
         out, _ = self.attn(q, x, x)  # out: bs x 1 x d_model
-        out = out.squeeze(1)
+        # out = out.squeeze(1)
+        out = out.mean(dim=1)
 
         return self.mlp(out)  # y: bs x 1
