@@ -8,16 +8,21 @@ class TimeSeriesTrainDataset(Dataset):
         self.signal_ids = signal_ids
         self.labels = labels
         self.img_path = data_path
+        self.signal_path = os.path.join(self.img_path, "all_signals.npy")
 
     def __getitem__(self, index):
         # check img path exists
-        if not os.path.exists(self.img_path):
-            print(f"Warning: Path {self.img_path} does not exist.")
-            return None
-        signal = np.load(
-            os.path.join(self.img_path, f"signals_{self.signal_ids[index]}.npy")
-        ).astype(np.float32)
-        signal = np.transpose(signal, (1, 0))  # [800000, 3]
+        # if not os.path.exists(self.img_path):
+        #     print(f"Warning: Path {self.img_path} does not exist.")
+        #     return None
+        # signal = np.load(
+        #     os.path.join(self.img_path, f"signals_{self.signal_ids[index]}.npy")
+        # ).astype(np.float32)
+        # signal = np.transpose(signal, (1, 0))  # [800000, 3]
+        self.signals = np.load(self.signal_path, mmap_mode="r")
+        signal = self.signals[
+            self.signal_ids[index]
+        ]  # signal shape is [800000, 3], astype float32
 
         label = self.labels[index]
         return (signal, label)

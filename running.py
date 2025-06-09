@@ -9,6 +9,7 @@ from collections import OrderedDict
 import torch
 import time
 import numpy as np
+import sys
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import accuracy_score
 from utils.utils import matthews_correlation
@@ -306,31 +307,36 @@ class ClassificationRunner(BaseRunner):
         epoch_loss = 0  # total loss of epoch
         total_samples = 0  # total samples in epoch
 
-        for i, batch in enumerate(self.dataloader):
-            self.optimizer.zero_grad()
+        try:
+            for i, batch in enumerate(self.dataloader):
+                self.optimizer.zero_grad()
 
-            X, targets = batch
-            X = X.float().to(device=self.device)
-            targets = targets.float().to(device=self.device)
-            outputs = self.model(X)
+                X, targets = batch
+                X = X.float().to(device=self.device)
+                targets = targets.float().to(device=self.device)
+                outputs = self.model(X)
 
-            loss = self.loss_module(outputs, targets)
-            batch_loss = loss.sum()
-            mean_loss = loss.mean()
+                loss = self.loss_module(outputs, targets)
+                batch_loss = loss.sum()
+                mean_loss = loss.mean()
 
-            backward_loss = mean_loss
+                backward_loss = mean_loss
 
-            backward_loss.backward()
-            self.optimizer.step()
+                backward_loss.backward()
+                self.optimizer.step()
 
-            metrics = {"loss": mean_loss.item()}
-            if i % self.print_interval == 0:
-                ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
-                self.print_callback(i, metrics, prefix="Training " + ending)
+                metrics = {"loss": mean_loss.item()}
+                if i % self.print_interval == 0:
+                    ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
+                    self.print_callback(i, metrics, prefix="Training " + ending)
 
-            with torch.no_grad():
-                total_samples += loss.numel()
-                epoch_loss += batch_loss.item()  # add total loss of batch
+                with torch.no_grad():
+                    total_samples += loss.numel()
+                    epoch_loss += batch_loss.item()  # add total loss of batch
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt detected (Ctrl+C)")
+            sys.exit(0)
+            del self.dataloader
 
         epoch_loss = (
             epoch_loss / total_samples
@@ -352,31 +358,37 @@ class ClassificationRunner(BaseRunner):
             "outputs": [],
             "metrics": [],
         }
-        for i, batch in enumerate(self.dataloader):
 
-            X, targets = batch
-            X = X.float().to(device=self.device)
-            targets = targets.float().to(device=self.device)
-            outputs = self.model(X)
+        try:
+            for i, batch in enumerate(self.dataloader):
 
-            loss = self.loss_module(outputs, targets)
-            batch_loss = loss.sum()
-            mean_loss = loss.mean()  # mean loss (over samples)
-            # (batch_size,) loss for each sample in the batch
+                X, targets = batch
+                X = X.float().to(device=self.device)
+                targets = targets.float().to(device=self.device)
+                outputs = self.model(X)
 
-            per_batch["targets"].append(targets.half().cpu().numpy())
-            per_batch["outputs"].append(outputs.half().cpu().numpy())
-            per_batch["metrics"].append([loss.half().cpu().numpy()])
+                loss = self.loss_module(outputs, targets)
+                batch_loss = loss.sum()
+                mean_loss = loss.mean()  # mean loss (over samples)
+                # (batch_size,) loss for each sample in the batch
 
-            metrics = {
-                "loss": mean_loss,
-            }
-            if i % self.print_interval == 0:
-                ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
-                self.print_callback(i, metrics, prefix="Evaluating " + ending)
+                per_batch["targets"].append(targets.half().cpu().numpy())
+                per_batch["outputs"].append(outputs.half().cpu().numpy())
+                per_batch["metrics"].append([loss.half().cpu().numpy()])
 
-            total_samples += loss.numel()
-            epoch_loss += batch_loss.half().cpu().item()
+                metrics = {
+                    "loss": mean_loss,
+                }
+                if i % self.print_interval == 0:
+                    ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
+                    self.print_callback(i, metrics, prefix="Evaluating " + ending)
+
+                total_samples += loss.numel()
+                epoch_loss += batch_loss.half().cpu().item()
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt detected (Ctrl+C)")
+            sys.exit(0)
+            del self.dataloader
 
         epoch_loss = (
             epoch_loss / total_samples
