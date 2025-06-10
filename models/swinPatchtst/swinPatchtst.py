@@ -301,7 +301,7 @@ class windowClassification(nn.Module):
         x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
         x = x.mean(dim=1)
         B, N, D = x.shape
-        query = x.mean(dim=1, keepdim=True)
+        query, _ = x.max(dim=1, keepdim=True)
         # x = self.cls_fusion(x)
         # q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
         out, _ = self.attn(query, x, x)  # out: bs x 1 x d_model
