@@ -301,10 +301,10 @@ class windowClassification(nn.Module):
         x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
         x = x.mean(dim=1)
         B, N, D = x.shape
-        x = self.cls_fusion(x)
-        q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
-        out, _ = self.attn(q, x, x)  # out: bs x 1 x d_model
+        # x = self.cls_fusion(x)
+        # q = self.query.expand(B, -1, -1)  # q: bs x 1 x d_model
+        out, _ = self.attn(x, x, x)  # out: bs x 1 x d_model
         # out = out.squeeze(1)
-        out = out.mean(dim=1)
+        out = out.max(dim=1).values
 
         return self.mlp(out)  # y: bs x 1
