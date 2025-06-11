@@ -11,8 +11,8 @@ import time
 import numpy as np
 import sys
 from sklearn.metrics import precision_recall_fscore_support
-from sklearn.metrics import accuracy_score
-from utils.utils import matthews_correlation
+from sklearn.metrics import accuracy_score, roc_auc_score
+from utils.utils import matthews_correlation, eval_mcc
 
 logger = logging.getLogger("__main__")
 
@@ -146,30 +146,37 @@ class Anomaly_Detection_Runner(BaseRunner):
         epoch_loss = 0  # total loss of epoch
         total_samples = 0  # total samples in epoch
 
-        for i, batch in enumerate(self.dataloader):
-            self.optimizer.zero_grad()
+        try:
+            for i, batch in enumerate(self.dataloader):
+                self.optimizer.zero_grad()
 
-            X, targets = batch
-            X = X.float().to(device=self.device)
-            outputs = self.model(X)
+                X, targets = batch
+                X = X.float().to(device=self.device)
+                targets = targets.float().to(device=self.device)
+                outputs = self.model(X)
 
-            loss = self.loss_module(X, outputs)
-            batch_loss = loss.sum()
-            mean_loss = loss.mean()
+                loss = self.loss_module(outputs, targets)
+                batch_loss = loss.sum()
+                mean_loss = loss.mean()
 
-            backward_loss = mean_loss
+                backward_loss = mean_loss
 
-            backward_loss.backward()
-            self.optimizer.step()
+                backward_loss.backward()
+                self.optimizer.step()
 
-            metrics = {"loss": mean_loss.item()}
-            if i % self.print_interval == 0:
-                ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
-                self.print_callback(i, metrics, prefix="Training " + ending)
+                metrics = {"loss": mean_loss.item()}
+                if i % self.print_interval == 0:
+                    ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
+                    self.print_callback(i, metrics, prefix="Training " + ending)
 
-            with torch.no_grad():
-                total_samples += loss.numel()
-                epoch_loss += batch_loss.item()  # add total loss of batch
+                with torch.no_grad():
+                    total_samples += loss.numel()
+                    epoch_loss += batch_loss.item()  # add total loss of batch
+
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt detected (Ctrl+C)")
+            sys.exit(0)
+            del self.dataloader
 
         epoch_loss = (
             epoch_loss / total_samples
@@ -191,30 +198,38 @@ class Anomaly_Detection_Runner(BaseRunner):
             "outputs": [],
             "metrics": [],
         }
-        for i, batch in enumerate(self.dataloader):
 
-            X, targets = batch
-            X = X.float().to(self.device)
-            outputs = self.model(X)
+        try:
+            for i, batch in enumerate(self.dataloader):
 
-            loss = self.loss_module(X, outputs)
-            batch_loss = loss.sum()
-            mean_loss = loss.mean()  # mean loss (over samples)
-            # (batch_size,) loss for each sample in the batch
+                X, targets = batch
+                X = X.float().to(self.device)
+                targets = targets.float().to(device=self.device)
+                outputs = self.model(X)
 
-            per_batch["targets"].append(targets.half().cpu().numpy())
-            per_batch["outputs"].append(outputs.half().cpu().numpy())
-            per_batch["metrics"].append([loss.half().cpu().numpy()])
+                loss = self.loss_module(outputs, targets)
+                batch_loss = loss.sum()
+                mean_loss = loss.mean()  # mean loss (over samples)
+                # (batch_size,) loss for each sample in the batch
 
-            metrics = {
-                "loss": mean_loss,
-            }
-            if i % self.print_interval == 0:
-                ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
-                self.print_callback(i, metrics, prefix="Evaluating " + ending)
+                per_batch["targets"].append(targets.half().cpu().numpy())
+                per_batch["outputs"].append(outputs.half().cpu().numpy())
+                per_batch["metrics"].append([loss.half().cpu().numpy()])
 
-            total_samples += loss.numel()
-            epoch_loss += batch_loss.half().cpu().item()
+                metrics = {
+                    "loss": mean_loss,
+                }
+                if i % self.print_interval == 0:
+                    ending = "" if epoch_num is None else "Epoch {} ".format(epoch_num)
+                    self.print_callback(i, metrics, prefix="Evaluating " + ending)
+
+                total_samples += loss.numel()
+                epoch_loss += batch_loss.half().cpu().item()
+
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt detected (Ctrl+C)")
+            sys.exit(0)
+            del self.dataloader
 
         epoch_loss = (
             epoch_loss / total_samples
@@ -222,77 +237,32 @@ class Anomaly_Detection_Runner(BaseRunner):
         self.epoch_metrics["epoch"] = epoch_num
         self.epoch_metrics["loss"] = epoch_loss
 
-        if keep_all:
-            return self.epoch_metrics, per_batch
-        else:
-            return self.epoch_metrics
+        pred = torch.from_numpy(np.concatenate(per_batch["outputs"], axis=0))
+        test_labels = np.concatenate(per_batch["targets"], axis=0).reshape(-1)
 
-    def test(self, epoch_num=None, train_loader=None):
-
-        self.model = self.model.eval()
-        attens_energy = []
-
-        # (1) statistic on the train set
-        with torch.no_grad():
-            for i, batch in enumerate(train_loader):
-                X, _ = batch
-                X = X.float().to(self.device)
-                outputs = self.model(X)
-
-                loss = self.loss_module(X, outputs)
-
-                # cal score
-                score = torch.mean(loss, dim=-1).detach().cpu().numpy()
-                attens_energy.append(score)
-
-        attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
-        train_energy = np.array(attens_energy)
-
-        # (2) statistic on the test set
-        attens_energy = []
-        test_labels = []
-        for i, batch in enumerate(self.dataloader):
-            X, targets = batch
-            X = X.float().to(self.device)
-            outputs = self.model(X)
-
-            loss = self.loss_module(X, outputs)
-
-            # cal score
-            score = torch.mean(loss, dim=-1).detach().cpu().numpy()
-            attens_energy.append(score)
-            test_labels.append(targets)
-
-        attens_energy = np.concatenate(attens_energy, axis=0).reshape(-1)
-        test_energy = np.array(attens_energy)
-        combined_energy = np.concatenate([train_energy, test_energy], axis=0)
-        threshold = np.percentile(combined_energy, 100 - self.config.anomaly_ratio)
-        logger.info("Threshold :", threshold)
-
-        # (3) evaluation on the test set
-        pred = (test_energy > threshold).astype(int)
-        test_labels = np.concatenate(test_labels, axis=0).reshape(-1)
-        test_labels = np.array(test_labels)
-        gt = test_labels.astype(int)
-
-        # fault detection
-        pred = np.array(pred)
-        gt = np.array(gt)
+        # get threshold
+        best_threshold, _, _ = eval_mcc(test_labels, pred)
+        pred = (pred > best_threshold).cpu().numpy().astype(int)
+        gt = np.array(test_labels).astype(int)
 
         accuracy = accuracy_score(gt, pred)
         precision, recall, f_score, support = precision_recall_fscore_support(
             gt, pred, average="binary"
         )
-
-        mcc = matthews_correlation(gt, pred)
+        mcc = matthews_correlation(gt, pred).item()
+        auc = roc_auc_score(gt, pred)
 
         self.epoch_metrics["accuracy"] = accuracy
         self.epoch_metrics["precision"] = precision
         self.epoch_metrics["recall"] = recall
         self.epoch_metrics["f1"] = f_score
         self.epoch_metrics["mcc"] = mcc
+        self.epoch_metrics["auc"] = auc
 
-        return self.epoch_metrics
+        if keep_all:
+            return self.epoch_metrics, per_batch
+        else:
+            return self.epoch_metrics
 
 
 class ClassificationRunner(BaseRunner):
