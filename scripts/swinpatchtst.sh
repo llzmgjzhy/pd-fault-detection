@@ -7,7 +7,7 @@ batch_size=32
 epochs=100
 lr=5e-4
 itr=1
-task=classification
+task=fault_detection
 
 python main_patchtst.py \
     --task $task \
@@ -21,7 +21,7 @@ python main_patchtst.py \
     --records_file vsb_$task.xlsx \
     --model_name $model \
     --epochs $epochs \
-    --loss cross_entropy \
+    --loss bce \
     --key_metric mcc \
     --seed 2025 \
     --batch_size $batch_size \

@@ -288,8 +288,8 @@ class windowClassification(nn.Module):
         )
         self.mlp = nn.Sequential(
             nn.LayerNorm(d_model),
-            nn.Linear(d_model, 2),
             nn.Dropout(head_dropout),
+            nn.Linear(d_model, 1),
         )
 
     def forward(self, x):

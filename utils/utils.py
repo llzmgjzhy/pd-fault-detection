@@ -3,6 +3,7 @@ import os
 from sklearn.model_selection import StratifiedKFold
 import numpy as np
 from openpyxl import Workbook, load_workbook
+import matplotlib.pyplot as plt
 
 import logging
 import sys
@@ -35,6 +36,68 @@ def matthews_correlation(y_true, y_pred):
     denominator = torch.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
 
     return numerator / (denominator + torch.finfo(torch.float32).eps)
+
+
+def mcc(tp, tn, fp, fn):
+    sup = tp * tn - fp * fn
+    inf = (tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)
+    if inf == 0:
+        return 0
+    else:
+        return sup / np.sqrt(inf)
+
+
+def eval_mcc(y_true, y_prob, show=False):
+    """
+    A fast implementation of Anokas mcc optimization code.
+
+    This code takes as input probabilities, and selects the threshold that
+    yields the best MCC score. It is efficient enough to be used as a
+    custom evaluation function in xgboost
+
+    Source: https://www.kaggle.com/cpmpml/optimizing-probabilities-for-best-mcc
+    Source: https://www.kaggle.com/c/bosch-production-line-performance/forums/t/22917/optimising-probabilities-binary-prediction-script
+    Creator: CPMP
+    """
+    idx = np.argsort(y_prob)
+    y_true_sort = y_true[idx]
+    n = y_true.shape[0]
+    nump = 1.0 * np.sum(y_true)  # number of positive
+    numn = n - nump  # number of negative
+    tp = nump
+    tn = 0.0
+    fp = numn
+    fn = 0.0
+    best_mcc = 0.0
+    best_id = -1
+    prev_proba = -1
+    best_proba = -1
+    mccs = np.zeros(n)
+    for i in range(n):
+        # all items with idx < i are predicted negative while others are predicted positive
+        # only evaluate mcc when probability changes
+        proba = y_prob[idx[i]]
+        if proba != prev_proba:
+            new_mcc = mcc(tp, tn, fp, fn)
+            if new_mcc >= best_mcc:
+                best_mcc = new_mcc
+                best_id = i
+                best_proba = (prev_proba + proba) / 2.0 if prev_proba >= 0 else proba
+            prev_proba = proba
+        mccs[i] = new_mcc
+        if y_true_sort[i] == 1:
+            tp -= 1.0
+            fn += 1.0
+        else:
+            fp -= 1.0
+            tn += 1.0
+    if show:
+        y_pred = (y_prob >= best_proba).astype(int)
+        score = matthews_correlation(y_true, y_pred)
+        plt.plot(mccs)
+        return best_proba, best_mcc, y_pred
+    else:
+        return best_proba, best_mcc, None
 
 
 def create_dirs(dirs):
