@@ -190,8 +190,10 @@ class SwinPatchTST(nn.Module):
             self.head = windowClassification(
                 d_model, n_heads, head_dropout=head_dropout
             )
-        elif head_type == "windowClassification":
-            self.head = windowClassification(d_model, head_dropout=head_dropout)
+        elif head_type == "fault_detection":
+            self.head = windowClassification(
+                d_model, n_heads, head_dropout=head_dropout
+            )
 
     def create_pretrain_head(self, head_nf, vars, dropout):
         return nn.Sequential(nn.Dropout(dropout), nn.Conv1d(head_nf, vars, 1))
@@ -308,4 +310,4 @@ class windowClassification(nn.Module):
         out = out.squeeze(1)
         # out = out.mean(dim=1)
 
-        return self.mlp(out)  # y: bs x 1
+        return self.mlp(out).squeeze(1)  # y: bs x 1

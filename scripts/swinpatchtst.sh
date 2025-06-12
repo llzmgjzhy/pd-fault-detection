@@ -12,7 +12,7 @@ task=fault_detection
 python main_patchtst.py \
     --task $task \
     --comment "$task using $model" \
-    --details "v2.4: no query. only use cls self-attention to get output representation." \
+    --details "fault detection instead of classification." \
     --name "${task}_vsb" \
     --root_path ./dataset \
     --meta_path vsb-power-line-fault-detection \
@@ -22,7 +22,7 @@ python main_patchtst.py \
     --model_name $model \
     --epochs $epochs \
     --loss bce \
-    --key_metric mcc \
+    --key_metric loss \
     --seed 2025 \
     --batch_size $batch_size \
     --lr $lr \

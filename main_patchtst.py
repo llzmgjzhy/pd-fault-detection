@@ -202,7 +202,11 @@ def main(config):
                 os.path.join(config.save_dir, "model_best.pth"), weights_only=True
             )["state_dict"]
         )
-        aggr_metrics_test = test(test_evaluator)
+        aggr_metrics_test = test(
+            test_evaluator,
+            config,
+            fold_i=fold_i,
+        )
 
         header = metrics_names
         metrics_filepath = os.path.join(
@@ -226,7 +230,6 @@ def main(config):
             config.experiment_name,
             best_metrics,
             aggr_metrics_val,
-            aggr_metrics_test,
             comment=comment,
         )
 
@@ -240,6 +243,9 @@ def main(config):
                 fold_i, *utils.readable_time(fold_runtime)
             )
         )
+
+    # get test mcc and save result
+    test_result = utils.itr_test_result(config)
 
     total_runtime = time.time() - total_start_time
     logger.info(
