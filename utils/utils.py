@@ -312,8 +312,8 @@ def itr_test_result(config):
         for i in range(config.split_num):
             path = os.path.join(config.pred_dir, f"{prefix}_pred_{i}.csv")
             df = pd.read_csv(path)
-            probs.extend(df["prob"].values)
-            labels.extend(df["label"].values)
+            probs.extend(df["pred"].values)
+            labels.extend(df["targets"].values)
         return np.array(probs), np.array(labels)
 
     all_val_probs, all_val_labels = load_fold_results("val")
@@ -325,7 +325,7 @@ def itr_test_result(config):
 
     # get the test mcc
     all_test_pred = (all_test_probs > best_threshold).astype(int)
-    test_mcc = matthews_correlation(all_test_labels, all_test_pred)
+    test_mcc = matthews_correlation(all_test_labels, all_test_pred).item()
     test_accuracy = accuracy_score(all_test_labels, all_test_pred)
     precision, recall, f_score, support = precision_recall_fscore_support(
         all_test_labels, all_test_pred, average="binary"
@@ -346,7 +346,7 @@ def itr_test_result(config):
     }
 
     # save csv with test results
-    test_results_df = pd.DataFrame(result)
+    test_results_df = pd.DataFrame([result])
     test_results_df.to_csv(
         os.path.join(config.pred_dir, "test_results.csv"), index=False
     )

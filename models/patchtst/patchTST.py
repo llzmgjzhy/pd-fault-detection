@@ -184,10 +184,10 @@ class PatchTST(nn.Module):
                 target_window,
                 head_dropout=head_dropout,
             )
-        elif head_type == "classification":
+        elif head_type == "classification" or head_type == "fault_detection":
             patch_num = int((context_window - patch_len) / stride + 1)
             self.head = ClassificationHead(
-                c_in, d_model, 2, head_dropout=head_dropout, patch_num=patch_num
+                c_in, d_model, 1, head_dropout=head_dropout, patch_num=patch_num
             )
 
     def create_pretrain_head(self, head_nf, vars, dropout):
@@ -265,4 +265,4 @@ class ClassificationHead(nn.Module):
         x = self.flatten(x)  # x: bs x nvars * d_model
         x = self.dropout(x)
         y = self.linear(x)  # y: bs x n_classes
-        return y
+        return y.squeeze(-1)  # y: bs

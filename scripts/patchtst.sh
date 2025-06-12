@@ -5,9 +5,9 @@ stride=1000
 model=patchtst
 batch_size=32
 epochs=100
-lr=1e-3
+lr=5e-4
 itr=1
-task=classification
+task=fault_detection
 
 python main_patchtst.py \
     --task $task \
@@ -20,8 +20,8 @@ python main_patchtst.py \
     --records_file vsb_$task.xlsx \
     --model_name $model \
     --epochs $epochs \
-    --loss cross_entropy \
-    --key_metric mcc \
+    --loss bce \
+    --key_metric loss \
     --seed 2025 \
     --batch_size $batch_size \
     --lr $lr \
@@ -30,8 +30,8 @@ python main_patchtst.py \
     --pred_len $pred_len \
     --d_model 128 \
     --n_heads 4 \
-    --d_ff 512 \
-    --dropout 0.1 \
+    --d_ff 256 \
+    --dropout 0.2 \
     --enc_in 3 \
     --patch_size $patch_size \
     --stride $stride \
