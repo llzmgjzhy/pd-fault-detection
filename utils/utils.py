@@ -4,6 +4,12 @@ from sklearn.model_selection import StratifiedKFold
 import numpy as np
 from openpyxl import Workbook, load_workbook
 import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.metrics import (
+    precision_recall_fscore_support,
+    accuracy_score,
+    roc_auc_score,
+)
 
 import logging
 import sys
@@ -294,3 +300,55 @@ def register_test_record(
             filepath = alt_path
 
     logger.info("Exported performance record to '{}'".format(filepath))
+
+
+def itr_test_result(config):
+    """
+    Calculate one iteration's test result for anomaly detection.
+    """
+
+    def load_fold_results(prefix):
+        probs, labels = [], []
+        for i in range(config.split_num):
+            path = os.path.join(config.pred_dir, f"{prefix}_pred_{i}.csv")
+            df = pd.read_csv(path)
+            probs.extend(df["prob"].values)
+            labels.extend(df["label"].values)
+        return np.array(probs), np.array(labels)
+
+    all_val_probs, all_val_labels = load_fold_results("val")
+    all_test_probs, all_test_labels = load_fold_results("test")
+
+    # get the best threshold
+    best_threshold, best_val_mcc, _ = eval_mcc(all_val_labels, all_val_probs)
+    logger.info(f"Best threshold: {best_threshold}, Best val MCC: {best_val_mcc:.4f}")
+
+    # get the test mcc
+    all_test_pred = (all_test_probs > best_threshold).astype(int)
+    test_mcc = matthews_correlation(all_test_labels, all_test_pred)
+    test_accuracy = accuracy_score(all_test_labels, all_test_pred)
+    precision, recall, f_score, support = precision_recall_fscore_support(
+        all_test_labels, all_test_pred, average="binary"
+    )
+    test_auc = roc_auc_score(all_test_labels, all_test_probs)
+
+    logger.info(f"Test MCC: {test_mcc:.4f}")
+
+    result = {
+        "best_threshold": best_threshold,
+        "best_val_mcc": best_val_mcc,
+        "test_mcc": test_mcc,
+        "test_accuracy": test_accuracy,
+        "test_precision": precision,
+        "test_recall": recall,
+        "test_f_score": f_score,
+        "test_auc": test_auc,
+    }
+
+    # save csv with test results
+    test_results_df = pd.DataFrame(result)
+    test_results_df.to_csv(
+        os.path.join(config.pred_dir, "test_results.csv"), index=False
+    )
+
+    return result

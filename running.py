@@ -10,8 +10,12 @@ import torch
 import time
 import numpy as np
 import sys
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.metrics import accuracy_score, roc_auc_score
+import pandas as pd
+from sklearn.metrics import (
+    precision_recall_fscore_support,
+    accuracy_score,
+    roc_auc_score,
+)
 from utils.utils import matthews_correlation, eval_mcc
 
 logger = logging.getLogger("__main__")
@@ -242,7 +246,7 @@ class Anomaly_Detection_Runner(BaseRunner):
 
         # get threshold
         best_threshold, _, _ = eval_mcc(test_labels, pred)
-        pred = (pred > best_threshold).cpu().numpy().astype(int)
+        pred = (pred > best_threshold).cpu().numpy()
         gt = np.array(test_labels).astype(int)
 
         accuracy = accuracy_score(gt, pred)
@@ -399,7 +403,7 @@ def validate(
     logger.info("Evaluating on validation set ...")
     eval_start_time = time.time()
     with torch.no_grad():
-        aggr_metrics = val_evaluator.evaluate(epoch, keep_all=False)
+        aggr_metrics, per_batch = val_evaluator.evaluate(epoch, keep_all=True)
     eval_runtime = time.time() - eval_start_time
     logger.info(
         "Validation runtime: {} hours, {} minutes, {} seconds\n".format(
@@ -441,16 +445,27 @@ def validate(
         )
         best_metrics = aggr_metrics.copy()
 
+        # save per-batch predictions
+        pred = np.concatenate(per_batch["outputs"], axis=0)
+        test_labels = np.concatenate(per_batch["targets"], axis=0).reshape(-1)
+        df = pd.DataFrame(
+            {
+                "pred": pred,
+                "targets": test_labels,
+            }
+        )
+        df.to_csv(os.path.join(config.pred_dir, f"val_pred_{fold_i}.csv"), index=False)
+
     return aggr_metrics, best_metrics, best_value
 
 
-def test(test_evaluator):
+def test(test_evaluator, config, fold_i=0):
     """Run an evaluation on the validation set while logging metrics, and handle outcome"""
 
     logger.info("Testing on test set ...")
     eval_start_time = time.time()
     with torch.no_grad():
-        aggr_metrics = test_evaluator.evaluate(keep_all=False)
+        aggr_metrics, per_batch = test_evaluator.evaluate(keep_all=True)
         del aggr_metrics["epoch"]
     eval_runtime = time.time() - eval_start_time
     logger.info(
@@ -478,5 +493,16 @@ def test(test_evaluator):
     for k, v in aggr_metrics.items():
         print_str += "{}: {:8f} | ".format(k, v)
     logger.info(print_str)
+
+    # save per-batch predictions
+    pred = np.concatenate(per_batch["outputs"], axis=0)
+    test_labels = np.concatenate(per_batch["targets"], axis=0).reshape(-1)
+    df = pd.DataFrame(
+        {
+            "pred": pred,
+            "targets": test_labels,
+        }
+    )
+    df.to_csv(os.path.join(config.pred_dir, f"test_pred_{fold_i}.csv"), index=False)
 
     return aggr_metrics
