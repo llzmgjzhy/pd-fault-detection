@@ -28,8 +28,8 @@ class SwinPatchTST(nn.Module):
         d_model = config.d_model
         d_ff = config.d_ff
         dropout = config.dropout
-        fc_dropout = config.dropout
-        head_dropout = config.dropout
+        fc_dropout = config.fc_dropout
+        head_dropout = config.head_dropout
 
         individual = getattr(config, "individual", False)
 
