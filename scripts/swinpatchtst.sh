@@ -35,6 +35,7 @@ python main_patchtst.py \
     --enc_in 3 \
     --patch_size $patch_size \
     --stride $stride \
-    --n_layer 8 \
+    --n_layer 6 \
     --window_num $window_num \
     --patience 100 \
+    # --weight_decay 1e-3 \
