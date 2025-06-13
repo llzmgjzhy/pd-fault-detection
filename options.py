@@ -221,6 +221,18 @@ class Options(object):
             help="Dropout applied to most transformer encoder layers",
         )
         self.parser.add_argument(
+            "--fc_dropout",
+            type=float,
+            default=0.1,
+            help="Dropout applied to most transformer encoder layers",
+        )
+        self.parser.add_argument(
+            "--head_dropout",
+            type=float,
+            default=0.1,
+            help="Dropout applied to most transformer encoder layers",
+        )
+        self.parser.add_argument(
             "--pos_encoding",
             choices={"fixed", "learnable"},
             default="fixed",

@@ -1,6 +1,6 @@
 seq_len=800000
-patch_size=1000
-stride=1000
+patch_size=500
+stride=500
 window_num=32
 model=swinPatchtst
 batch_size=32
@@ -29,9 +29,11 @@ python main_patchtst.py \
     --itr $itr \
     --seq_len $seq_len \
     --d_model 128 \
-    --n_heads 8 \
+    --n_heads 4 \
     --d_ff 256 \
     --dropout 0.2 \
+    --fc_dropout 0.2 \
+    --head_dropout 0.2 \
     --enc_in 3 \
     --patch_size $patch_size \
     --stride $stride \
