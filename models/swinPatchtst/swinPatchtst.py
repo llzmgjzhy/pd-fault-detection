@@ -316,6 +316,7 @@ class AnomalyClassificationHead(nn.Module):
         super().__init__()
         self.score_head = nn.Sequential(
             nn.LayerNorm(d_model),
+            nn.Dropout(head_dropout),
             nn.Linear(d_model, 1),
         )
         self.k_ratio = k_ratio
@@ -333,4 +334,4 @@ class AnomalyClassificationHead(nn.Module):
         k = max(1, int(scores.size(1) * self.k_ratio))
         topk_scores, _ = torch.topk(scores, k, dim=1)  # [bs, k]
         anomaly_score = topk_scores.mean(dim=1)  # [bs]
-        return self.dropout(anomaly_score)
+        return anomaly_score
