@@ -191,9 +191,7 @@ class SwinPatchTST(nn.Module):
                 d_model, n_heads, head_dropout=head_dropout
             )
         elif head_type == "fault_detection":
-            self.head = windowClassification(
-                d_model, n_heads, head_dropout=head_dropout
-            )
+            self.head = AnomalyClassificationHead(d_model, head_dropout=head_dropout)
 
     def create_pretrain_head(self, head_nf, vars, dropout):
         return nn.Sequential(nn.Dropout(dropout), nn.Conv1d(head_nf, vars, 1))
@@ -311,3 +309,28 @@ class windowClassification(nn.Module):
         out = out.mean(dim=1)
 
         return self.mlp(out).squeeze(1)  # y: bs x 1
+
+
+class AnomalyClassificationHead(nn.Module):
+    def __init__(self, d_model, head_dropout=0.2, k_ratio=0.2):
+        super().__init__()
+        self.score_head = nn.Sequential(
+            nn.LayerNorm(d_model),
+            nn.Linear(d_model, 1),
+        )
+        self.k_ratio = k_ratio
+        self.dropout = nn.Dropout(head_dropout)
+
+    def forward(self, x):
+        """
+        x: [bs, n_windows, d_model]
+        return: [bs]
+        """
+        x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
+        x = x.mean(dim=1)
+        B, N, D = x.shape
+        scores = self.score_head(x).squeeze(-1)  # [bs, n_windows]
+        k = max(1, int(scores.size(1) * self.k_ratio))
+        topk_scores, _ = torch.topk(scores, k, dim=1)  # [bs, k]
+        anomaly_score = topk_scores.mean(dim=1)  # [bs]
+        return self.dropout(anomaly_score)
