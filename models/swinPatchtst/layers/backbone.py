@@ -322,16 +322,16 @@ class TSTEncoder(nn.Module):
         output = src
 
         # stage 1
-        cls_token = self.cls.expand(B, -1, -1).to(src.device)
+        # cls_token = self.cls.expand(B, -1, -1).to(src.device)
         output = output.reshape(-1, N // self.n_windows, L)
         B_w, P, D = output.shape
-        cls_token = cls_token.reshape(B_w, -1, D)  # [B_w x 1 x D]
-        output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
+        # cls_token = cls_token.reshape(B_w, -1, D)  # [B_w x 1 x D]
+        # output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
         for mod in self.layers1:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
 
-        cls_output1 = output[:, 0, :].unsqueeze(1)  # [B_w x D]
-        cls_output1 = cls_output1.reshape(B, -1, L)  # [B x n_window x D]
+        # cls_output1 = output[:, 0, :].unsqueeze(1)  # [B_w x D]
+        # cls_output1 = cls_output1.reshape(B, -1, L)  # [B x n_window x D]
 
         # output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(B, self.n_windows, -1, L)
@@ -344,8 +344,8 @@ class TSTEncoder(nn.Module):
         # output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
         for mod in self.layers2:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
-        cls_output2 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
-        cls_output2 = cls_output2.reshape(B, -1, L)  # [B x 1 x D]
+        # cls_output2 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        # cls_output2 = cls_output2.reshape(B, -1, L)  # [B x 1 x D]
 
         # output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(B, self.n_windows // 2, -1, L)
@@ -358,12 +358,12 @@ class TSTEncoder(nn.Module):
         # output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
         for mod in self.layers3:
             output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
-        cls_output3 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
-        cls_output3 = cls_output3.reshape(B, -1, L)  # [B x 1 x D]
+        # cls_output3 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        # cls_output3 = cls_output3.reshape(B, -1, L)  # [B x 1 x D]
 
         # output = output[:, 1:, :]  # [B_w x P x D]
         output = output.reshape(B, self.n_windows // 2**2, -1, L)
-        output = self.patch_merge3(output)
+        # output = self.patch_merge3(output)
 
         # # stage 4
         # output = output.reshape(B * (self.n_windows // 2**3), -1, L)
@@ -375,14 +375,14 @@ class TSTEncoder(nn.Module):
         # cls_output4 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
         # cls_output4 = cls_output4.reshape(B, -1, L)  # [B x 1 x D]
         # # output = output[:, 1:, :]  # [B_w x P x D]
-        # output = output.reshape(B, -1, L)
+        output = output.reshape(B, -1, L)
 
-        final_cls_output = torch.cat(
-            (cls_output1, cls_output2, cls_output3), dim=1
-        )  # [B_w x 3 x D]
+        # final_cls_output = torch.cat(
+        #     (cls_output1, cls_output2, cls_output3), dim=1
+        # )  # [B_w x 3 x D]
         # output = self.patch_merge3(output)
 
-        return final_cls_output
+        return output
 
 
 class TSTEncoderLayer(nn.Module):
@@ -492,13 +492,14 @@ class PatchMerging(nn.Module):
     def forward(self, x):
         # x: [bs*nvars,n_windows,patch_num, d_model]
         b, n_w, n_p, d_model = x.shape
-        cls_token, patches = (
-            x[:, :, :1, :],
-            x[:, :, 1:, :],
-        )  # cls_token: [bs*nvars*n_windows, d_model]
-        if patches.shape[1] % 2 != 0:
-            patches = patches[:, :-1, :]  # Remove last patch if odd
-            n_w -= 1
+        patches = x
+        # cls_token, patches = (
+        #     x[:, :, :1, :],
+        #     x[:, :, 1:, :],
+        # )  # cls_token: [bs*nvars*n_windows, d_model]
+        # if patches.shape[1] % 2 != 0:
+        #     patches = patches[:, :-1, :]  # Remove last patch if odd
+        #     n_w -= 1
 
         # merge patches pairs
         patches = patches.reshape(b, -1, d_model)
@@ -509,16 +510,16 @@ class PatchMerging(nn.Module):
         patches = patches.reshape(b, n_w // 2, -1, d_model)
 
         # merge cls tokens
-        cls_token = cls_token.reshape(b, -1, 2, d_model)
-        cls_token = cls_token.reshape(b, -1, 2 * d_model)
-        cls_token = self.cls_norm(cls_token)
-        cls_token = self.cls_reduction(cls_token)
+        # cls_token = cls_token.reshape(b, -1, 2, d_model)
+        # cls_token = cls_token.reshape(b, -1, 2 * d_model)
+        # cls_token = self.cls_norm(cls_token)
+        # cls_token = self.cls_reduction(cls_token)
 
-        out = torch.cat(
-            (cls_token.unsqueeze(2), patches), dim=2
-        )  # [bs*nvars, n_windows//2,new_patch_num, d_model]
+        # out = torch.cat(
+        #     (cls_token.unsqueeze(2), patches), dim=2
+        # )  # [bs*nvars, n_windows//2,new_patch_num, d_model]
 
-        return out
+        return patches
 
 
 class FlashMultiHeadAttention(nn.Module):

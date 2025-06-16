@@ -20,7 +20,7 @@ def dataloader_provider(config, train_idx, val_idx, test_idx, signals_ids, label
         TimeSeriesTrainDataset, train_idx, signals_ids, labels, config
     )
     val_loader = _create_loader(
-        TimeSeriesTrainDataset, val_idx, signals_ids, labels, config
+        TimeSeriesTrainDataset, val_idx, signals_ids, labels, config, is_train=False
     )
     test_loader = _create_loader(
         TimeSeriesTrainDataset, test_idx, signals_ids, labels, config, is_train=False
