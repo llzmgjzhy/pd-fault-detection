@@ -6,7 +6,7 @@ model=swinPatchtst
 batch_size=32
 epochs=100
 lr=5e-4
-itr=1
+itr=5
 task=fault_detection
 
 python main_patchtst.py \
@@ -37,7 +37,7 @@ python main_patchtst.py \
     --enc_in 3 \
     --patch_size $patch_size \
     --stride $stride \
-    --n_layer 6 \
+    --n_layer 8 \
     --window_num $window_num \
     --patience 100 \
     # --weight_decay 1e-3 \

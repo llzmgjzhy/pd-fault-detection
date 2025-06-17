@@ -318,15 +318,20 @@ class AnomalyClassificationHead(nn.Module):
         super().__init__()
         self.score_head = nn.Sequential(
             nn.LayerNorm(d_model),
-            nn.Dropout(head_dropout),
             nn.Linear(d_model, 1),
         )
         self.k_ratio = k_ratio
         self.dropout = nn.Dropout(head_dropout)
         self.query = nn.Parameter(torch.randn(1, 1, d_model))
-        self.attn = nn.MultiheadAttention(
-            embed_dim=d_model, num_heads=n_heads, dropout=head_dropout, batch_first=True
+        self.attn = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=n_heads,
+            dim_feedforward=d_model * 4,
+            dropout=head_dropout,
+            activation="gelu",
+            batch_first=True,
         )
+        self.pool = nn.AdaptiveAvgPool1d(1)
 
     def forward(self, x):
         """
@@ -336,8 +341,8 @@ class AnomalyClassificationHead(nn.Module):
         x = x.permute(0, 1, 3, 2)  # x: bs x nvars x n_window x d_model
         x = x.mean(dim=1)
         B, N, D = x.shape
-        query = self.query.expand(B, -1, -1)
-        x = x.mean(dim=1, keepdim=True)  # x: [bs, d_model]
-        out, _ = self.attn(query, x, x)
-        out = self.score_head(out.squeeze(1))  # out: [bs, 1]
+        x = self.attn(x)
+        x = x.transpose(1, 2)
+        x = self.pool(x).squeeze(-1)
+        out = self.score_head(x)  # out: [bs, 1]
         return out.squeeze(1)
