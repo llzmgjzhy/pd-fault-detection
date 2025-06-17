@@ -321,6 +321,7 @@ class AnomalyClassificationHead(nn.Module):
         )
         self.k_ratio = k_ratio
         self.dropout = nn.Dropout(head_dropout)
+        self.linear = nn.Linear(32 + 16 + 8 + 4, 1)
 
     def forward(self, x):
         """
@@ -331,7 +332,8 @@ class AnomalyClassificationHead(nn.Module):
         x = x.mean(dim=1)
         B, N, D = x.shape
         scores = self.score_head(x).squeeze(-1)  # [bs, n_windows]
-        k = max(1, int(scores.size(1) * self.k_ratio))
-        topk_scores, _ = torch.topk(scores, k, dim=1)  # [bs, k]
-        anomaly_score = topk_scores.mean(dim=1)  # [bs]
+        # k = max(1, int(scores.size(1) * self.k_ratio))
+        # topk_scores, _ = torch.topk(scores, k, dim=1)  # [bs, k]
+        # anomaly_score = topk_scores.mean(dim=1)  # [bs]
+        anomaly_score = self.linear(scores).squeeze(-1)  # [bs]
         return anomaly_score
