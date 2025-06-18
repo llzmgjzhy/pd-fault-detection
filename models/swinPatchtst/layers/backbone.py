@@ -247,7 +247,7 @@ class TSTEncoder(nn.Module):
                     pre_norm=pre_norm,
                     store_attn=store_attn,
                 )
-                for i in range(n_layers)
+                for i in range(n_layers // 4)
             ]
         )
         self.layers2 = nn.ModuleList(
@@ -337,33 +337,33 @@ class TSTEncoder(nn.Module):
         output = output.reshape(B, self.n_windows, -1, L)
         output = self.patch_merge1(output)
 
-        # # stage 2
-        # output = output.reshape(B * (self.n_windows // 2), -1, L)
-        # B_w, P, D = output.shape
-        # # cls_token = self.cls_2.expand(B_w, -1, -1).to(src.device)
-        # # output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
-        # for mod in self.layers2:
-        #     output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
-        # cls_output2 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
-        # cls_output2 = cls_output2.reshape(B, -1, L)  # [B x 1 x D]
+        # stage 2
+        output = output.reshape(B * (self.n_windows // 2), -1, L)
+        B_w, P, D = output.shape
+        # cls_token = self.cls_2.expand(B_w, -1, -1).to(src.device)
+        # output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
+        for mod in self.layers2:
+            output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
+        cls_output2 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        cls_output2 = cls_output2.reshape(B, -1, L)  # [B x 1 x D]
 
-        # # output = output[:, 1:, :]  # [B_w x P x D]
-        # output = output.reshape(B, self.n_windows // 2, -1, L)
-        # output = self.patch_merge2(output)
+        # output = output[:, 1:, :]  # [B_w x P x D]
+        output = output.reshape(B, self.n_windows // 2, -1, L)
+        output = self.patch_merge2(output)
 
-        # # stage 3
-        # output = output.reshape(B * (self.n_windows // 2**2), -1, L)
-        # B_w, P, D = output.shape
-        # # cls_token = self.cls_3.expand(B_w, -1, -1).to(src.device)
-        # # output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
-        # for mod in self.layers3:
-        #     output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
-        # cls_output3 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
-        # cls_output3 = cls_output3.reshape(B, -1, L)  # [B x 1 x D]
+        # stage 3
+        output = output.reshape(B * (self.n_windows // 2**2), -1, L)
+        B_w, P, D = output.shape
+        # cls_token = self.cls_3.expand(B_w, -1, -1).to(src.device)
+        # output = torch.cat((cls_token, output), dim=1)  # [B_w x (P+1) x D]
+        for mod in self.layers3:
+            output = mod(output, key_padding_mask=key_padding_mask, attn_mask=attn_mask)
+        cls_output3 = output[:, 0, :].unsqueeze(1)  # [B_w x 1 x D]
+        cls_output3 = cls_output3.reshape(B, -1, L)  # [B x 1 x D]
 
-        # # output = output[:, 1:, :]  # [B_w x P x D]
-        # output = output.reshape(B, self.n_windows // 2**2, -1, L)
-        # output = self.patch_merge3(output)
+        # output = output[:, 1:, :]  # [B_w x P x D]
+        output = output.reshape(B, self.n_windows // 2**2, -1, L)
+        output = self.patch_merge3(output)
 
         # # stage 4
         # output = output.reshape(B * (self.n_windows // 2**3), -1, L)
@@ -377,10 +377,12 @@ class TSTEncoder(nn.Module):
         # # output = output[:, 1:, :]  # [B_w x P x D]
         # output = output.reshape(B, -1, L)
 
-        # final_cls_output = torch.cat((cls_output1), dim=1)  # [B_w x 3 x D]
+        final_cls_output = torch.cat(
+            (cls_output1, cls_output2, cls_output3), dim=1
+        )  # [B_w x 3 x D]
         # output = self.patch_merge3(output)
 
-        return cls_output1
+        return final_cls_output
 
 
 class TSTEncoderLayer(nn.Module):
